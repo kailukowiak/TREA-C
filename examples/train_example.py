@@ -1,13 +1,13 @@
 """Example training script for DuET."""
 
 import pandas as pd
-import torch
 import pytorch_lightning as pl
-from duet.data.dataset import SyntheticTimeSeriesDataset
+import torch
 
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from duet import DualPatchTransformer, TimeSeriesDataModule
+from duet.data.dataset import SyntheticTimeSeriesDataset
 
 
 def main():
@@ -27,22 +27,23 @@ def main():
     )
 
     # Prepare data for DataFrame
-    data_for_df = {
-        'label': [inspect_dataset[i]['y'].item() for i in range(20)]
-    }
+    data_for_df = {"label": [inspect_dataset[i]["y"].item() for i in range(20)]}
     # Add mean of each numeric channel
     for i in range(inspect_dataset.C_num):
-        data_for_df[f'num_{i}_mean'] = [torch.nanmean(inspect_dataset[j]['x_num'][i]).item() for j in range(20)]
+        data_for_df[f"num_{i}_mean"] = [
+            torch.nanmean(inspect_dataset[j]["x_num"][i]).item() for j in range(20)
+        ]
 
     # Add first value of each categorical channel
     for i in range(inspect_dataset.C_cat):
-        data_for_df[f'cat_{i}_first'] = [inspect_dataset[j]['x_cat'][i][0].item() for j in range(20)]
+        data_for_df[f"cat_{i}_first"] = [
+            inspect_dataset[j]["x_cat"][i][0].item() for j in range(20)
+        ]
 
     df = pd.DataFrame(data_for_df)
     print("--- Synthetic Data Head (20 samples) ---")
     print(df)
     print("----------------------------------------")
-
 
     # Create synthetic data module with variable categorical cardinalities
     dm = TimeSeriesDataModule(

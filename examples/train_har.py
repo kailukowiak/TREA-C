@@ -1,40 +1,42 @@
 """Train DualPatchTransformer on Human Activity Recognition dataset."""
 
 import sys
-sys.path.append('.')
 
-import torch
+
+sys.path.append(".")
+
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from examples.download_har_dataset import HARDataset
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.models.transformer import DualPatchTransformer
+from examples.download_har_dataset import HARDataset
 
 
 def main():
     print("Loading HAR dataset...")
-    
+
     # Load datasets
     train_dataset = HARDataset(train=True, download=True)
     val_dataset = HARDataset(train=False, download=True)
-    
-    print(f"\nDataset loaded successfully!")
+
+    print("\nDataset loaded successfully!")
     print(f"Train samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
     print(f"Number of channels: {train_dataset[0]['x_num'].shape[0]}")
     print(f"Sequence length: {train_dataset[0]['x_num'].shape[1]}")
     print(f"Activities: {train_dataset.activity_names}")
-    
+
     # Create data module
     dm = TimeSeriesDataModuleV2(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         batch_size=64,
-        num_workers=4
+        num_workers=4,
     )
-    
+
     # Create model
     model = DualPatchTransformer(
         C_num=9,  # 9 sensor channels (3-axis acc + 3-axis gyro + 3-axis total acc)
@@ -45,50 +47,48 @@ def main():
         nhead=4,
         num_layers=3,
         task="classification",
-        num_classes=6  # 6 activities
+        num_classes=6,  # 6 activities
     )
-    
-    print(f"\nModel created with {sum(p.numel() for p in model.parameters())} parameters")
-    
+
+    print(
+        f"\nModel created with {sum(p.numel() for p in model.parameters())} parameters"
+    )
+
     # Callbacks
     checkpoint = ModelCheckpoint(
-        monitor='val_loss',
-        dirpath='checkpoints/har',
-        filename='duet-har-{epoch:02d}-{val_loss:.2f}',
+        monitor="val_loss",
+        dirpath="checkpoints/har",
+        filename="duet-har-{epoch:02d}-{val_loss:.2f}",
         save_top_k=3,
-        mode='min'
+        mode="min",
     )
-    
-    early_stop = EarlyStopping(
-        monitor='val_loss',
-        patience=15,
-        mode='min'
-    )
-    
+
+    early_stop = EarlyStopping(monitor="val_loss", patience=15, mode="min")
+
     # Logger
-    logger = TensorBoardLogger('logs', name='har_activity_recognition')
-    
+    logger = TensorBoardLogger("logs", name="har_activity_recognition")
+
     # Trainer
     trainer = pl.Trainer(
         max_epochs=30,
-        accelerator='auto',
+        accelerator="auto",
         devices=1,
         callbacks=[checkpoint, early_stop],
         logger=logger,
         gradient_clip_val=1.0,
         log_every_n_steps=10,
-        val_check_interval=0.5  # Check validation twice per epoch
+        val_check_interval=0.5,  # Check validation twice per epoch
     )
-    
+
     # Train
     print("\nStarting training on HAR dataset...")
     print("This is real sensor data from smartphones!")
     trainer.fit(model, dm)
-    
+
     # Test final performance
     print("\nEvaluating on test set...")
     results = trainer.test(model, dm)
-    
+
     print("\nTraining complete!")
     print(f"Best model saved to: {checkpoint.best_model_path}")
     print(f"Test results: {results}")
