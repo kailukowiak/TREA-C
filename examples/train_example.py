@@ -75,7 +75,7 @@ def main():
     # Create TensorBoard logger
     logger = TensorBoardLogger(
         save_dir="logs",
-        name="duet_experiment",
+        name="synthetic_classification",
         version=None,  # Auto-increment version
         log_graph=True,
         default_hp_metric=False,

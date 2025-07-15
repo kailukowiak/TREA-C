@@ -17,6 +17,9 @@ dependencies = [
     "lightning>=2.5.2",
     "tensorboard>=2.19.0",
     "torchvision>=0.22.1",
+    "matplotlib>=3.10.3",
+    "kagglehub>=0.3.12",
+    "neuralforecast>=3.0.0",
 ]
 
 [tool.setuptools.packages.find]
