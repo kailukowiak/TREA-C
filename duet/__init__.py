@@ -2,11 +2,12 @@
 
 __version__ = "0.1.0"
 
-from duet.models import DualPatchTransformer
 from duet.data import SyntheticTimeSeriesDataset, TimeSeriesDataModule
+from duet.models import DualPatchTransformer
+
 
 __all__ = [
     "DualPatchTransformer",
-    "SyntheticTimeSeriesDataset", 
+    "SyntheticTimeSeriesDataset",
     "TimeSeriesDataModule",
 ]
