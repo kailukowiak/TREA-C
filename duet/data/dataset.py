@@ -1,6 +1,3 @@
-"""Dataset implementations for DuET."""
-
-
 import pandas as pd
 import torch
 
@@ -63,9 +60,18 @@ class SyntheticTimeSeriesDataset(Dataset):
 
         # Generate targets
         if task == "classification":
-            self.y = torch.randint(0, num_classes, (num_samples,))
-        else:
-            self.y = torch.randn(num_samples, 1)
+            # Create a learnable pattern: class is based on the mean of the first channel
+            signal = self.x_num[:, 0, :].mean(dim=1)
+            # Stretch the signal to make the pattern more pronounced
+            stretched_signal = (signal - signal.mean()) / signal.std()
+            # Quantize the signal to create class labels
+            self.y = torch.quantize_per_tensor(stretched_signal, scale=1.0, zero_point=0, dtype=torch.qint8).int_repr()
+            # Clamp values to be within the number of classes
+            self.y = torch.clamp(self.y.long(), 0, num_classes - 1)
+        else: # regression
+            # Create a learnable pattern: target is the mean of the first channel + noise
+            self.y = self.x_num[:, 0, :].mean(dim=1, keepdim=True) + torch.randn(num_samples, 1) * 0.1
+
 
     def __len__(self) -> int:
         return len(self.y)
