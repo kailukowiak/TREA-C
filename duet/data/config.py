@@ -29,7 +29,7 @@ class DatasetConfig:
     # Task properties
     task: str  # 'classification' or 'regression'
     target_column: str
-    
+
     # Optional fields with defaults
     categorical_mappings: dict[str, dict[str, int]] = field(default_factory=dict)
     n_classes: int | None = None  # For classification

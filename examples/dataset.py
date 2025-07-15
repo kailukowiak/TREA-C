@@ -24,7 +24,8 @@ class SyntheticTimeSeriesDataset(Dataset):
         self.x_cat = torch.randint(0, 5, (num_samples, C_cat, T))
 
         if task == "classification":
-            # Create a learnable pattern: class is based on the mean of the first channel
+            # Create a learnable pattern: class is based on the mean of the first
+            # channel
             signal = self.x_num[:, 0, :].mean(dim=1)
             # Stretch the signal to make the pattern more pronounced
             stretched_signal = (signal - signal.mean()) / signal.std()
@@ -35,7 +36,8 @@ class SyntheticTimeSeriesDataset(Dataset):
             # Clamp values to be within the number of classes
             self.y = torch.clamp(self.y, 0, num_classes - 1)
         else:  # regression
-            # Create a learnable pattern: target is the mean of the first channel + noise
+            # Create a learnable pattern: target is the mean of the first channel
+            # + noise
             self.y = (
                 self.x_num[:, 0, :].mean(dim=1, keepdim=True)
                 + torch.randn(num_samples, 1) * 0.1

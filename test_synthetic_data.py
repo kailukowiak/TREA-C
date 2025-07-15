@@ -33,7 +33,8 @@ for label in range(3):
     if mask.any():
         label_means = means[mask]
         print(
-            f"Label {label}: mean={label_means.mean():.3f}, std={label_means.std():.3f}, count={mask.sum()}"
+            f"Label {label}: mean={label_means.mean():.3f}, "
+            f"std={label_means.std():.3f}, count={mask.sum()}"
         )
 
 # Show the deterministic mapping

@@ -271,7 +271,7 @@ def main():
     print("=" * 80)
     print("Model Comparison on NASA Turbofan Dataset")
     print("=" * 80)
-    
+
     # Training configuration
     MAX_EPOCHS = 10
 
@@ -385,7 +385,9 @@ def main():
         num_layers=3,
     )
 
-    patchtst_results = train_model(patchtst_model, dm, "PatchTST", max_epochs=MAX_EPOCHS)
+    patchtst_results = train_model(
+        patchtst_model, dm, "PatchTST", max_epochs=MAX_EPOCHS
+    )
     results.append(patchtst_results)
 
     # 3. Train CNN baseline

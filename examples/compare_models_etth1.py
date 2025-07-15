@@ -7,12 +7,11 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from huggingface_hub import hf_hub_download
-from transformers import PatchTSTModel
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from sklearn.metrics import accuracy_score, f1_score
+from transformers import PatchTSTConfig, PatchTSTModel
 
 
 sys.path.append(".")
@@ -33,162 +32,226 @@ class HFPatchTSTClassifier(pl.LightningModule):
         lr: float = 1e-3,
         dropout: float = 0.1,
         pretrained_model: str = "namctin/patchtst_etth1_pretrain",
-        use_pretrained: bool = True,
+        use_pretrained: bool = False,  # Seq classification not supported
     ):
         super().__init__()
         self.save_hyperparameters()
 
-        self.num_classes = num_classes
-        self.seq_len = seq_len
-        self.c_in = c_in
         self.lr = lr
+        self.num_classes = num_classes
 
-        # Load pretrained PatchTST model
-        if use_pretrained:
-            try:
-                self.patchtst = PatchTSTModel.from_pretrained(pretrained_model)
-                print(f"Loaded pretrained PatchTST from {pretrained_model}")
-                # Check if sequence length matches
-                if self.patchtst.config.context_length != seq_len:
-                    print(
-                        f"Warning: Pretrained model expects sequence length {self.patchtst.config.context_length}, but got {seq_len}"
-                    )
-                    print("Using default PatchTST configuration instead")
-                    use_pretrained = False
-            except Exception as e:
-                print(f"Failed to load pretrained model: {e}")
-                print("Using default PatchTST configuration")
-                use_pretrained = False
+        # Create PatchTST config for forecasting model with much larger capacity
+        config = PatchTSTConfig(
+            num_input_channels=c_in,
+            context_length=seq_len,
+            patch_length=16,
+            patch_stride=8,
+            num_hidden_layers=8,  # Increased from 6
+            num_attention_heads=16,  # Increased from 8
+            hidden_size=256,  # Increased from 128
+            intermediate_size=1024,  # Increased from 512
+            hidden_dropout_prob=dropout,
+            attention_probs_dropout_prob=dropout,
+        )
 
-        if not use_pretrained:
-            # Create PatchTST with default configuration
-            from transformers import PatchTSTConfig
+        # Use the base PatchTST model
+        self.patchtst = PatchTSTModel(config)
 
-            config = PatchTSTConfig(
-                num_input_channels=c_in,
-                context_length=seq_len,
-                patch_length=16,
-                patch_stride=8,
-                num_hidden_layers=3,
-                num_attention_heads=4,
-                hidden_size=64,
-                intermediate_size=256,
-                hidden_dropout_prob=dropout,
-                attention_probs_dropout_prob=dropout,
-                prediction_length=1,
-                num_targets=c_in,
-                pooling_type="mean",
-                norm_type="batchnorm",
-                scaling=True,
-                loss="mse",
-                pre_norm=True,
-                norm_eps=1e-5,
-            )
-            self.patchtst = PatchTSTModel(config)
-
-        # Classification head
-        # Get the hidden size from the model config
-        hidden_size = self.patchtst.config.hidden_size
-
+        # Add classification head with attention pooling
+        self.attention_pool = nn.Linear(config.hidden_size, 1)
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Linear(config.hidden_size, config.hidden_size // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_size // 2, num_classes),
+            nn.Linear(config.hidden_size // 2, num_classes),
         )
 
         self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, x_num, x_cat=None):
-        """Forward pass.
+        # PatchTST expects [B, T, C]
+        x = x_num.transpose(1, 2)
 
-        Args:
-            x_num: Input tensor [B, C, T]
-            x_cat: Categorical features (ignored)
-
-        Returns:
-            Classification logits [B, num_classes]
-        """
-        # PatchTST expects [B, T, C] format
-        x = x_num.transpose(1, 2)  # [B, T, C]
-        batch_size = x.shape[0]
-
-        # Create dummy future values for the model
-        # The pretrained model expects both past and future values
-        dummy_future = torch.zeros(
-            batch_size, 1, x.shape[-1], device=x.device, dtype=x.dtype
+        # Get patch embeddings from PatchTST backbone
+        outputs = self.patchtst(
+            past_values=x,
+            return_dict=True,
         )
 
-        try:
-            # Use the pretrained model
-            outputs = self.patchtst(
-                past_values=x,
-                future_values=dummy_future,
-                output_hidden_states=True,
-                return_dict=True,
-            )
+        # Use the last hidden state for classification
+        # outputs.last_hidden_state shape: [B, num_features, num_patches, hidden_size]
+        batch_size = outputs.last_hidden_state.shape[0]
+        hidden_states = outputs.last_hidden_state.view(
+            batch_size, -1, outputs.last_hidden_state.shape[-1]
+        )
 
-            # Get the last hidden state
-            if hasattr(outputs, "last_hidden_state"):
-                hidden_states = outputs.last_hidden_state  # [B, T, D]
-            else:
-                # Fallback: use the prediction head's input
-                hidden_states = outputs.hidden_states[-1]  # [B, T, D]
+        # Attention-based pooling
+        attention_weights = torch.softmax(self.attention_pool(hidden_states), dim=1)
+        pooled = torch.sum(attention_weights * hidden_states, dim=1)
 
-            # Global average pooling
-            pooled = hidden_states.mean(dim=1)  # [B, D]
-
-        except Exception as e:
-            print(f"Error in PatchTST forward: {e}")
-            # Fallback to simple averaging and project to expected dimension
-            pooled = x.mean(dim=1)  # [B, C]
-            # Project to hidden_size to match classifier input expectation
-            hidden_size = self.patchtst.config.hidden_size
-            if pooled.shape[-1] != hidden_size:
-                # Add a projection layer if dimensions don't match
-                if not hasattr(self, "fallback_proj"):
-                    self.fallback_proj = nn.Linear(pooled.shape[-1], hidden_size).to(
-                        pooled.device
-                    )
-                pooled = self.fallback_proj(pooled)
-
-        # Classification
+        # Pass through classification head
         logits = self.classifier(pooled)
+
         return logits
 
-    def training_step(self, batch, batch_idx):
-        out = self(batch["x_num"], batch.get("x_cat"))
-        targets = batch["y"]
-        # handle one-hot labels
-        if targets.ndim > 1:
-            targets = torch.argmax(targets, dim=1)
-        if targets.dtype != torch.long:
-            targets = targets.long()
-        loss = self.loss_fn(out, targets)
+    def training_step(self, batch, _batch_idx):
+        x = batch["x_num"]
+        labels = batch["y"]
+
+        # Ensure labels are in the right format for CrossEntropyLoss
+        if labels.ndim == 2:
+            # If labels are one-hot encoded, convert to class indices
+            labels = torch.argmax(labels, dim=1)
+        labels = labels.long()
+
+        # Forward pass
+        logits = self.forward(x)
+
+        # CrossEntropyLoss expects: logits [B, C] and labels [B]
+        if logits.ndim == 1:
+            logits = logits.unsqueeze(0)
+
+        loss = self.loss_fn(logits, labels)
+
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        out = self(batch["x_num"], batch.get("x_cat"))
-        targets = batch["y"]
-        # handle one-hot labels
-        if targets.ndim > 1:
-            targets = torch.argmax(targets, dim=1)
-        if targets.dtype != torch.long:
-            targets = targets.long()
+    def validation_step(self, batch, _batch_idx):
+        x = batch["x_num"]
+        labels = batch["y"]
 
-        loss = self.loss_fn(out, targets)
+        # Ensure labels are in the right format for CrossEntropyLoss
+        if labels.ndim == 2:
+            # If labels are one-hot encoded, convert to class indices
+            labels = torch.argmax(labels, dim=1)
+        labels = labels.long()
+
+        # Forward pass
+        logits = self.forward(x)
+
+        # CrossEntropyLoss expects: logits [B, C] and labels [B]
+        if logits.ndim == 1:
+            logits = logits.unsqueeze(0)
+
+        loss = self.loss_fn(logits, labels)
+
         self.log("val_loss", loss)
-
-        # Calculate accuracy
-        preds = torch.argmax(out, dim=1)
-        acc = (preds == targets).float().mean()
+        preds = logits.argmax(dim=1)
+        acc = (preds == labels).float().mean()
         self.log("val_acc", acc)
-
-        return {"val_loss": loss, "preds": preds, "labels": targets}
+        return {"val_loss": loss, "preds": preds, "labels": labels}
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=0.01)
+
+
+class PatchTSTClassifier(pl.LightningModule):
+    """PatchTST adapted for classification."""
+
+    def __init__(
+        self,
+        c_in: int,
+        seq_len: int,
+        num_classes: int,
+        patch_len: int = 16,
+        stride: int = 8,
+        d_model: int = 128,
+        nhead: int = 8,
+        num_layers: int = 3,
+        lr: float = 1e-3,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # Patching
+        self.patch_len = patch_len
+        self.stride = stride
+        self.num_patches = (seq_len - patch_len) // stride + 1
+
+        # Patch embedding
+        self.patch_embedding = nn.Linear(patch_len * c_in, d_model)
+
+        # Positional encoding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches, d_model))
+
+        # Transformer
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, batch_first=True, norm_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Classification head
+        self.head = nn.Linear(d_model, num_classes)
+
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def create_patches(self, x):
+        """Create patches from input tensor."""
+        B, C, T = x.shape
+        patches = []
+
+        for i in range(0, T - self.patch_len + 1, self.stride):
+            patch = x[:, :, i : i + self.patch_len]  # [B, C, patch_len]
+            patch = patch.reshape(B, -1)  # [B, C * patch_len]
+            patches.append(patch)
+
+        patches = torch.stack(patches, dim=1)  # [B, num_patches, C * patch_len]
+        return patches
+
+    def forward(self, x_num, x_cat=None):
+        # For simplicity, only use numeric features
+        patches = self.create_patches(x_num)
+
+        # Embed patches
+        x = self.patch_embedding(patches)
+        x = x + self.pos_embedding
+
+        # Transformer
+        x = self.transformer(x)
+
+        # Global average pooling
+        x = x.mean(dim=1)  # [B, d_model]
+
+        # Classification
+        return self.head(x)
+
+    def training_step(self, batch, _batch_idx):
+        x = batch["x_num"]
+        labels = batch["y"]
+
+        # Ensure labels are in the right format
+        if labels.ndim == 2:
+            labels = torch.argmax(labels, dim=1)
+        labels = labels.long()
+
+        logits = self.forward(x)
+        loss = self.loss_fn(logits, labels)
+
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, _batch_idx):
+        x = batch["x_num"]
+        labels = batch["y"]
+
+        # Ensure labels are in the right format
+        if labels.ndim == 2:
+            labels = torch.argmax(labels, dim=1)
+        labels = labels.long()
+
+        logits = self.forward(x)
+        loss = self.loss_fn(logits, labels)
+
+        self.log("val_loss", loss)
+        preds = logits.argmax(dim=1)
+        acc = (preds == labels).float().mean()
+        self.log("val_acc", acc)
+        return {"val_loss": loss, "preds": preds, "labels": labels}
+
+    def configure_optimizers(self):
+        return torch.optim.AdamW(
+            self.parameters(), lr=self.hparams.lr, weight_decay=0.01
+        )
 
 
 class CNNClassifier(pl.LightningModule):
@@ -246,26 +309,24 @@ class CNNClassifier(pl.LightningModule):
         x = self.feature_extractor(x_num)
         return self.classifier(x)
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, _batch_idx):
         out = self(batch["x_num"], batch.get("x_cat"))
         targets = batch["y"]
-        # handle one-hot labels
-        if targets.ndim > 1:
+        # ensure 1D class indices
+        if targets.ndim == 2:
             targets = torch.argmax(targets, dim=1)
-        if targets.dtype != torch.long:
-            targets = targets.long()
+        targets = targets.reshape(-1).long()
         loss = self.loss_fn(out, targets)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, _batch_idx):
         out = self(batch["x_num"], batch.get("x_cat"))
         targets = batch["y"]
-        # handle one-hot labels
-        if targets.ndim > 1:
+        # ensure 1D class indices
+        if targets.ndim == 2:
             targets = torch.argmax(targets, dim=1)
-        if targets.dtype != torch.long:
-            targets = targets.long()
+        targets = targets.reshape(-1).long()
         loss = self.loss_fn(out, targets)
         self.log("val_loss", loss)
 
@@ -274,6 +335,117 @@ class CNNClassifier(pl.LightningModule):
         self.log("val_acc", acc)
 
         return {"val_loss": loss, "preds": preds, "labels": targets}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+
+
+class PatchTSTNan(pl.LightningModule):
+    """Custom PatchTST with dual-patch NaN handling from DuET."""
+
+    def __init__(
+        self,
+        c_in: int,
+        seq_len: int,
+        num_classes: int,
+        patch_len: int = 16,
+        stride: int = 8,
+        d_model: int = 128,
+        nhead: int = 8,
+        num_layers: int = 3,
+        lr: float = 1e-3,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # Patching
+        self.patch_len = patch_len
+        self.stride = stride
+        self.num_patches = (seq_len - patch_len) // stride + 1
+
+        # Patch embedding - NOTE: input size is 2*c_in due to dual-patch (value + mask)
+        self.patch_embedding = nn.Linear(patch_len * (2 * c_in), d_model)
+
+        # Positional encoding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches, d_model))
+
+        # Transformer
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, batch_first=True, norm_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Classification head
+        self.head = nn.Linear(d_model, num_classes)
+
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def create_patches(self, x):
+        """Create patches from input tensor."""
+        B, C, T = x.shape
+        patches = []
+
+        for i in range(0, T - self.patch_len + 1, self.stride):
+            patch = x[:, :, i : i + self.patch_len]  # [B, C, patch_len]
+            patch = patch.reshape(B, -1)  # [B, C * patch_len]
+            patches.append(patch)
+
+        patches = torch.stack(patches, dim=1)  # [B, num_patches, C * patch_len]
+        return patches
+
+    def forward(self, x_num, x_cat=None):
+        # Apply dual-patch NaN handling from DuET
+        m_nan = torch.isnan(x_num).float()  # [B, C_num, T]
+        x_val = torch.nan_to_num(x_num, nan=0.0)  # [B, C_num, T]
+
+        # Stack value & mask channels (dual-patch)
+        x_num2 = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]
+
+        # Create patches from dual-patch input
+        patches = self.create_patches(x_num2)
+
+        # Embed patches
+        x = self.patch_embedding(patches)
+        x = x + self.pos_embedding
+
+        # Transformer
+        x = self.transformer(x)
+
+        # Global average pooling
+        x = x.mean(dim=1)  # [B, d_model]
+
+        # Classification
+        return self.head(x)
+
+    def training_step(self, batch, _batch_idx):
+        x = batch["x_num"]
+        labels = batch["y"]
+
+        # Ensure labels are in the right format
+        if labels.ndim == 2:
+            labels = torch.argmax(labels, dim=1)
+        labels = labels.long()
+
+        logits = self.forward(x)
+        loss = self.loss_fn(logits, labels)
+
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, _batch_idx):
+        x = batch["x_num"]
+        labels = batch["y"]
+
+        # Ensure labels are in the right format
+        if labels.ndim == 2:
+            labels = torch.argmax(labels, dim=1)
+        labels = labels.long()
+
+        logits = self.forward(x)
+        loss = self.loss_fn(logits, labels)
+
+        self.log("val_loss", loss)
+        return loss
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -421,11 +593,12 @@ def main():
         C_cat=0,  # No categorical features in ETTh1
         cat_cardinalities=[],
         T=seq_len,
-        d_model=64,
-        nhead=4,
+        d_model=128,  # Increased from 64 to match PatchTST
+        nhead=8,  # Increased from 4 to match PatchTST
         num_layers=3,
         task="classification",
         num_classes=num_classes,
+        lr=1e-3,
     )
 
     duet_results = train_model(duet_model, dm, "DuET", max_epochs=MAX_EPOCHS)
@@ -436,21 +609,43 @@ def main():
     print("Training HuggingFace PatchTST...")
     print("=" * 60)
 
-    patchtst_model = HFPatchTSTClassifier(
+    hf_patchtst_model = HFPatchTSTClassifier(
         c_in=c_in,
         seq_len=seq_len,
         num_classes=num_classes,
-        lr=1e-3,
+        lr=5e-4,  # Reduce learning rate
         dropout=0.1,
-        use_pretrained=True,
+        use_pretrained=False,
     )
 
-    patchtst_results = train_model(
-        patchtst_model, dm, "HF-PatchTST", max_epochs=MAX_EPOCHS
+    hf_patchtst_results = train_model(
+        hf_patchtst_model, dm, "HF-PatchTST", max_epochs=MAX_EPOCHS
     )
-    results.append(patchtst_results)
+    results.append(hf_patchtst_results)
 
-    # 3. Train CNN baseline
+    # 3. Train Custom PatchTST
+    print("\\n" + "=" * 60)
+    print("Training Custom PatchTST...")
+    print("=" * 60)
+
+    custom_patchtst_model = PatchTSTClassifier(
+        c_in=c_in,
+        seq_len=seq_len,
+        num_classes=num_classes,
+        patch_len=16,
+        stride=8,
+        d_model=128,
+        nhead=8,
+        num_layers=3,
+        lr=1e-3,
+    )
+
+    custom_patchtst_results = train_model(
+        custom_patchtst_model, dm, "Custom-PatchTST", max_epochs=MAX_EPOCHS
+    )
+    results.append(custom_patchtst_results)
+
+    # 4. Train CNN baseline
     print("\\n" + "=" * 60)
     print("Training 1D CNN Baseline...")
     print("=" * 60)
@@ -466,6 +661,28 @@ def main():
 
     cnn_results = train_model(cnn_model, dm, "CNN", max_epochs=MAX_EPOCHS)
     results.append(cnn_results)
+
+    # 5. Train PatchTSTNan (Custom PatchTST with dual-patch NaN handling)
+    print("\\n" + "=" * 60)
+    print("Training PatchTSTNan...")
+    print("=" * 60)
+
+    patchtst_nan_model = PatchTSTNan(
+        c_in=c_in,
+        seq_len=seq_len,
+        num_classes=num_classes,
+        patch_len=16,
+        stride=8,
+        d_model=128,
+        nhead=8,
+        num_layers=3,
+        lr=1e-3,
+    )
+
+    patchtst_nan_results = train_model(
+        patchtst_nan_model, dm, "PatchTSTNan", max_epochs=MAX_EPOCHS
+    )
+    results.append(patchtst_nan_results)
 
     # Create comparison DataFrame
     df = pd.DataFrame(results)

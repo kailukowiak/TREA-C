@@ -40,7 +40,6 @@ def load_har_data(base_path, train=True):
     subset = "train" if train else "test"
 
     # Load sensor data
-    X = np.loadtxt(base_path / subset / f"X_{subset}.txt")
     y = np.loadtxt(base_path / subset / f"y_{subset}.txt", dtype=int) - 1  # 0-indexed
 
     # Reshape to [samples, channels, time]

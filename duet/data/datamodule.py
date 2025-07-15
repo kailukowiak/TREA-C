@@ -1,6 +1,5 @@
 """PyTorch Lightning DataModule for DuET."""
 
-
 import pytorch_lightning as pl
 
 from torch.utils.data import DataLoader, random_split

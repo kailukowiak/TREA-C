@@ -60,14 +60,14 @@ class SyntheticTimeSeriesDataset(Dataset):
 
         # Generate targets
         if task == "classification":
-            # Create a complex pattern that requires learning temporal and cross-channel patterns
+            # Create a complex pattern that requires learning temporal and
+            # cross-channel patterns
             # Use a fixed seed for reproducible complex patterns
             gen = torch.Generator().manual_seed(42)
-            
+
             # Generate random weights for combining features
             feature_weights = torch.randn(C_num, generator=gen)
-            temporal_weights = torch.randn(T // 4, generator=gen)
-            
+
             # Create signal by combining:
             # 1. Weighted average of channels (ignoring NaN)
             channel_features = []
@@ -75,20 +75,22 @@ class SyntheticTimeSeriesDataset(Dataset):
                 # Replace NaN with 0 for this computation
                 channel_clean = torch.nan_to_num(self.x_num[:, i, :], nan=0.0)
                 channel_features.append(channel_clean)
-            
+
             # Stack and weight channels
             channels_stacked = torch.stack(channel_features, dim=1)  # [B, C_num, T]
-            weighted_channels = (channels_stacked * feature_weights.view(1, -1, 1)).sum(dim=1)  # [B, T]
-            
+            weighted_channels = (channels_stacked * feature_weights.view(1, -1, 1)).sum(
+                dim=1
+            )  # [B, T]
+
             # 2. Temporal aggregation with overlapping windows
             signal_components = []
             window_size = T // 4
             for i in range(0, T - window_size + 1, window_size // 2):
-                window = weighted_channels[:, i:i+window_size]
+                window = weighted_channels[:, i : i + window_size]
                 # Compute both mean and std for this window
                 signal_components.append(window.mean(dim=1))
                 signal_components.append(window.std(dim=1))
-            
+
             # 3. Include categorical dynamics
             if C_cat > 0:
                 # Count unique values in first categorical channel
@@ -96,48 +98,53 @@ class SyntheticTimeSeriesDataset(Dataset):
                 for i in range(num_samples):
                     cat_unique[i] = len(torch.unique(self.x_cat[i, 0, :]))
                 signal_components.append(cat_unique / 10.0)  # Normalize
-            
+
             # Combine all components
             all_features = torch.stack(signal_components, dim=1)  # [B, n_features]
-            
+
             # Use random projection to combine features
             projection = torch.randn(all_features.shape[1], generator=gen)
-            combined_signal = (all_features @ projection)
-            
+            combined_signal = all_features @ projection
+
             # Add moderate noise
             noise = torch.randn(num_samples, generator=gen) * 0.5
             final_signal = combined_signal + noise
-            
+
             # Create balanced classes using quantiles
             sorted_signal, _ = torch.sort(final_signal)
             n_per_class = num_samples // num_classes
-            
+
             self.y = torch.zeros(num_samples, dtype=torch.long)
             for i in range(num_classes):
                 if i < num_classes - 1:
                     threshold = sorted_signal[(i + 1) * n_per_class]
-                    mask = (final_signal >= sorted_signal[i * n_per_class]) & (final_signal < threshold)
+                    mask = (final_signal >= sorted_signal[i * n_per_class]) & (
+                        final_signal < threshold
+                    )
                 else:
                     mask = final_signal >= sorted_signal[i * n_per_class]
                 self.y[mask] = i
-                
-        else: # regression
+
+        else:  # regression
             # Create a more complex regression target
             # Combine multiple channels with non-linear transformations
             signal_components = []
-            
+
             # Use means and stds from different channels
             for i in range(min(2, C_num)):
                 signal_components.append(torch.nanmean(self.x_num[:, i, :], dim=1))
                 signal_components.append(torch.nanstd(self.x_num[:, i, :], dim=1))
-            
+
             # Non-linear combination
             weights = torch.randn(len(signal_components))
-            combined = sum(w * comp for w, comp in zip(weights, signal_components))
-            
-            # Add non-linearity and noise
-            self.y = torch.tanh(combined).unsqueeze(1) + torch.randn(num_samples, 1) * 0.2
+            combined = sum(
+                w * comp for w, comp in zip(weights, signal_components, strict=False)
+            )
 
+            # Add non-linearity and noise
+            self.y = (
+                torch.tanh(combined).unsqueeze(1) + torch.randn(num_samples, 1) * 0.2
+            )
 
     def __len__(self) -> int:
         return len(self.y)

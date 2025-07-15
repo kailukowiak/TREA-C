@@ -17,7 +17,6 @@ def download_bearing_dataset(data_dir="./data/nasa_bearing"):
 
     # IMS Bearing dataset from NASA prognostics repository
     # This is a well-known dataset for predictive maintenance
-    base_url = "https://www.nasa.gov/wp-content/uploads/2022/09/"
 
     print("NASA Bearing Dataset")
     print("=" * 60)
@@ -54,7 +53,6 @@ def create_synthetic_bearing_data(data_path):
 
     # We'll create a simplified version
     n_bearings = 4
-    n_sensors_per_bearing = 2
     n_timesteps = 1000  # Simplified from millions of points
 
     for bearing_id in range(1, n_bearings + 1):

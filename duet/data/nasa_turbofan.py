@@ -1,20 +1,21 @@
 """NASA Turbofan Engine Degradation Dataset (C-MAPSS) loader."""
 
+
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import torch
-import numpy as np
-from pathlib import Path
+
 from torch.utils.data import Dataset
-import zipfile
-import urllib.request
-import os
 
 
 class NASATurbofanDataset(Dataset):
     """NASA C-MAPSS Turbofan Engine Degradation Dataset.
 
     This dataset contains run-to-failure simulated data from turbofan engines.
-    Each engine starts with different degrees of initial wear and manufacturing variation.
+    Each engine starts with different degrees of initial wear and manufacturing
+    variation.
 
     Features:
     - 21 sensor channels
@@ -26,7 +27,7 @@ class NASATurbofanDataset(Dataset):
     # Column names for the dataset
     index_names = ["unit_nr", "time_cycles"]
     setting_names = ["setting_1", "setting_2", "setting_3"]
-    sensor_names = ["s_{}".format(i + 1) for i in range(21)]
+    sensor_names = [f"s_{i + 1}" for i in range(21)]
     col_names = index_names + setting_names + sensor_names
 
     def __init__(
@@ -63,8 +64,9 @@ class NASATurbofanDataset(Dataset):
 
     def _download(self):
         """Download NASA C-MAPSS dataset using kagglehub."""
-        import kagglehub
         import shutil
+
+        import kagglehub
 
         print("Downloading NASA C-MAPSS dataset via kagglehub...")
 
@@ -128,7 +130,7 @@ class NASATurbofanDataset(Dataset):
         sequences = []
         targets = []
 
-        for features, rul in zip(self.data, self.labels):
+        for features, rul in zip(self.data, self.labels, strict=False):
             # Create sliding windows
             for i in range(len(features) - self.sequence_length + 1):
                 seq = features[i : i + self.sequence_length]

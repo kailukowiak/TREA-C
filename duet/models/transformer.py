@@ -61,7 +61,9 @@ class DualPatchTransformer(pl.LightningModule):
         if task == "classification" and num_classes is None:
             raise ValueError("num_classes must be specified for classification task")
         if pooling not in ["mean", "last", "cls"]:
-            raise ValueError(f"pooling must be one of ['mean', 'last', 'cls'], got {pooling}")
+            raise ValueError(
+                f"pooling must be one of ['mean', 'last', 'cls'], got {pooling}"
+            )
 
         # Categorical embeddings (time-varying) with variable cardinalities
         self.cat_embs = nn.ModuleList(
@@ -74,7 +76,7 @@ class DualPatchTransformer(pl.LightningModule):
         # Add CLS token if using cls pooling
         if pooling == "cls":
             self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
-            
+
         # Temporal encoder
         enc_layer = nn.TransformerEncoderLayer(
             d_model=d_model, nhead=nhead, batch_first=True, dropout=dropout
@@ -126,9 +128,9 @@ class DualPatchTransformer(pl.LightningModule):
 
         # 7. transformer + configurable pooling
         z = self.transformer(z)
-        
+
         if self.pooling == "mean":
-            if hasattr(self, 'cls_token'):
+            if hasattr(self, "cls_token"):
                 z = z[:, 1:, :].mean(dim=1)  # exclude CLS token
             else:
                 z = z.mean(dim=1)  # global avg pooling
