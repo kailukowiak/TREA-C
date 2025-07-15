@@ -205,40 +205,6 @@ trainer.fit(model, dm)
 
 ---
 
-## 🏋️ 7. Training (Regression Example)
-
-```python
-dm = TimeSeriesDataModule(batch_size=32, task='regression')
-model = DualPatchTransformer(C_num=4, C_cat=2, cat_cardinality=5, T=64, task='regression')
-
-trainer = pl.Trainer(max_epochs=10)
-trainer.fit(model, dm)
-```
-
-\---. Training (Classification Example)
-
-```python
-dm = TimeSeriesDataModule(batch_size=32, task='classification')
-model = DualPatchTransformer(C_num=4, C_cat=2, cat_cardinality=5, T=64, task='classification', num_classes=3)
-
-trainer = pl.Trainer(max_epochs=10)
-trainer.fit(model, dm)
-```
-
----
-
-## 🏋️ 7. Training (Regression Example)
-
-```python
-dm = TimeSeriesDataModule(batch_size=32, task='regression')
-model = DualPatchTransformer(C_num=4, C_cat=2, cat_cardinality=5, T=64, task='regression')
-
-trainer = pl.Trainer(max_epochs=10)
-trainer.fit(model, dm)
-```
-
----
-
 ## 🔁 8. Pretraining on Unlabeled Data (Self-Supervised)
 
 Replace the `head` and `loss_fn` with a self-supervised objective (e.g., Masked Patch

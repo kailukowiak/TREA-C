@@ -21,7 +21,6 @@ class DatasetConfig:
     categorical_features: list[str]
     n_categorical: int
     categorical_cardinalities: list[int]
-    categorical_mappings: dict[str, dict[str, int]] = field(default_factory=dict)
 
     # Time series properties
     sequence_length: int
@@ -30,9 +29,10 @@ class DatasetConfig:
     # Task properties
     task: str  # 'classification' or 'regression'
     target_column: str
+    
+    # Optional fields with defaults
+    categorical_mappings: dict[str, dict[str, int]] = field(default_factory=dict)
     n_classes: int | None = None  # For classification
-
-    # Data properties
     has_missing_values: bool = False
     missing_value_ratio: float = 0.0
 
