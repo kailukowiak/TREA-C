@@ -23,6 +23,8 @@ class DualPatchTransformer(pl.LightningModule):
         nhead: int = 4,
         num_layers: int = 2,
         lr: float = 1e-3,
+        pooling: str = "mean",
+        dropout: float = 0.1,
     ):
         """Initialize the Dual-Patch Transformer.
 
@@ -38,6 +40,8 @@ class DualPatchTransformer(pl.LightningModule):
             nhead: Number of attention heads
             num_layers: Number of transformer layers
             lr: Learning rate
+            pooling: Pooling strategy ('mean', 'last', 'cls')
+            dropout: Dropout rate
         """
         super().__init__()
         self.save_hyperparameters()
@@ -45,6 +49,8 @@ class DualPatchTransformer(pl.LightningModule):
         self.task = task
         self.d_model = d_model
         self.lr = lr
+        self.pooling = pooling
+        self.T = T
 
         # Validate inputs
         if len(cat_cardinalities) != C_cat:
@@ -54,6 +60,8 @@ class DualPatchTransformer(pl.LightningModule):
             )
         if task == "classification" and num_classes is None:
             raise ValueError("num_classes must be specified for classification task")
+        if pooling not in ["mean", "last", "cls"]:
+            raise ValueError(f"pooling must be one of ['mean', 'last', 'cls'], got {pooling}")
 
         # Categorical embeddings (time-varying) with variable cardinalities
         self.cat_embs = nn.ModuleList(
@@ -63,9 +71,13 @@ class DualPatchTransformer(pl.LightningModule):
         # Numeric projection: NOTE 2× input channels for value + mask
         self.num_proj = nn.Conv1d(C_num * 2, d_model, kernel_size=1)
 
+        # Add CLS token if using cls pooling
+        if pooling == "cls":
+            self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
+            
         # Temporal encoder
         enc_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True
+            d_model=d_model, nhead=nhead, batch_first=True, dropout=dropout
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
 
@@ -87,27 +99,43 @@ class DualPatchTransformer(pl.LightningModule):
         Returns:
             Model output [B, num_classes] or [B, 1]
         """
-        # 1-2. mask + zero-fill
+        # 1-2. Always use dual-patch: mask + zero-fill (consistent shape)
         m_nan = torch.isnan(x_num).float()  # [B, C_num, T]
         x_val = torch.nan_to_num(x_num, nan=0.0)  # [B, C_num, T]
 
-        # 3. stack value & mask channels
+        # 3. stack value & mask channels (always dual-patch)
         x_num2 = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]
 
         # 4. project numeric features
         z_num = self.num_proj(x_num2)  # [B, d_model, T]
 
-        # 5. add categorical embeddings
+        # 5. add categorical embeddings (safe summation)
         if len(self.cat_embs) > 0:
-            cat_vec = sum(emb(x_cat[:, i]) for i, emb in enumerate(self.cat_embs))
-            z = z_num + cat_vec.permute(0, 2, 1)  # align dims
+            cat_vecs = [emb(x_cat[:, i]) for i, emb in enumerate(self.cat_embs)]
+            cat_vec = torch.stack(cat_vecs, dim=0).sum(dim=0)  # [B, T, d_model]
+            z = z_num + cat_vec.permute(0, 2, 1)  # align dims: [B, d_model, T]
         else:
             z = z_num
 
-        # 6. transformer + pooling
+        # 6. Add CLS token if using cls pooling
         z = z.permute(0, 2, 1)  # [B, T, d_model]
+        if self.pooling == "cls":
+            batch_size = z.shape[0]
+            cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # [B, 1, d_model]
+            z = torch.cat([cls_tokens, z], dim=1)  # [B, T+1, d_model]
+
+        # 7. transformer + configurable pooling
         z = self.transformer(z)
-        z = z.mean(dim=1)  # global avg pooling
+        
+        if self.pooling == "mean":
+            if hasattr(self, 'cls_token'):
+                z = z[:, 1:, :].mean(dim=1)  # exclude CLS token
+            else:
+                z = z.mean(dim=1)  # global avg pooling
+        elif self.pooling == "last":
+            z = z[:, -1, :]  # last time step
+        elif self.pooling == "cls":
+            z = z[:, 0, :]  # CLS token
 
         return self.head(z)
 

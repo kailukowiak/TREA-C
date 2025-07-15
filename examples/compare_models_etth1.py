@@ -7,6 +7,8 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+from huggingface_hub import hf_hub_download
+from transformers import PatchTSTModel
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -18,98 +20,175 @@ sys.path.append(".")
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.etth1 import ETTh1Dataset
 from duet.models.transformer import DualPatchTransformer
-from examples.hf_patchtst_classifier import HFPatchTSTClassifier
 
 
-class PatchTSTClassifier(pl.LightningModule):
-    """PatchTST adapted for classification."""
+class HFPatchTSTClassifier(pl.LightningModule):
+    """HuggingFace PatchTST adapted for classification."""
 
     def __init__(
         self,
         c_in: int,
         seq_len: int,
         num_classes: int,
-        patch_len: int = 16,
-        stride: int = 8,
-        d_model: int = 128,
-        nhead: int = 8,
-        num_layers: int = 3,
         lr: float = 1e-3,
+        dropout: float = 0.1,
+        pretrained_model: str = "namctin/patchtst_etth1_pretrain",
+        use_pretrained: bool = True,
     ):
         super().__init__()
         self.save_hyperparameters()
 
-        # Patching
-        self.patch_len = patch_len
-        self.stride = stride
-        self.num_patches = (seq_len - patch_len) // stride + 1
+        self.num_classes = num_classes
+        self.seq_len = seq_len
+        self.c_in = c_in
+        self.lr = lr
 
-        # Patch embedding
-        self.patch_embedding = nn.Linear(patch_len * c_in, d_model)
+        # Load pretrained PatchTST model
+        if use_pretrained:
+            try:
+                self.patchtst = PatchTSTModel.from_pretrained(pretrained_model)
+                print(f"Loaded pretrained PatchTST from {pretrained_model}")
+                # Check if sequence length matches
+                if self.patchtst.config.context_length != seq_len:
+                    print(
+                        f"Warning: Pretrained model expects sequence length {self.patchtst.config.context_length}, but got {seq_len}"
+                    )
+                    print("Using default PatchTST configuration instead")
+                    use_pretrained = False
+            except Exception as e:
+                print(f"Failed to load pretrained model: {e}")
+                print("Using default PatchTST configuration")
+                use_pretrained = False
 
-        # Positional encoding
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches, d_model))
+        if not use_pretrained:
+            # Create PatchTST with default configuration
+            from transformers import PatchTSTConfig
 
-        # Transformer
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True, norm_first=True
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+            config = PatchTSTConfig(
+                num_input_channels=c_in,
+                context_length=seq_len,
+                patch_length=16,
+                patch_stride=8,
+                num_hidden_layers=3,
+                num_attention_heads=4,
+                hidden_size=64,
+                intermediate_size=256,
+                hidden_dropout_prob=dropout,
+                attention_probs_dropout_prob=dropout,
+                prediction_length=1,
+                num_targets=c_in,
+                pooling_type="mean",
+                norm_type="batchnorm",
+                scaling=True,
+                loss="mse",
+                pre_norm=True,
+                norm_eps=1e-5,
+            )
+            self.patchtst = PatchTSTModel(config)
 
         # Classification head
-        self.flatten = nn.Flatten(start_dim=1)
-        self.head = nn.Linear(d_model * self.num_patches, num_classes)
+        # Get the hidden size from the model config
+        hidden_size = self.patchtst.config.hidden_size
+
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size // 2, num_classes),
+        )
 
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def create_patches(self, x):
-        """Create patches from input tensor."""
-        B, C, T = x.shape
-        patches = []
-
-        for i in range(0, T - self.patch_len + 1, self.stride):
-            patch = x[:, :, i : i + self.patch_len]  # [B, C, patch_len]
-            patch = patch.reshape(B, -1)  # [B, C * patch_len]
-            patches.append(patch)
-
-        patches = torch.stack(patches, dim=1)  # [B, num_patches, C * patch_len]
-        return patches
-
     def forward(self, x_num, x_cat=None):
-        # For simplicity, only use numeric features
-        patches = self.create_patches(x_num)
+        """Forward pass.
 
-        # Embed patches
-        x = self.patch_embedding(patches)
-        x = x + self.pos_embedding
+        Args:
+            x_num: Input tensor [B, C, T]
+            x_cat: Categorical features (ignored)
 
-        # Transformer
-        x = self.transformer(x)
+        Returns:
+            Classification logits [B, num_classes]
+        """
+        # PatchTST expects [B, T, C] format
+        x = x_num.transpose(1, 2)  # [B, T, C]
+        batch_size = x.shape[0]
 
-        # Global pooling and classification
-        x = self.flatten(x)
-        return self.head(x)
+        # Create dummy future values for the model
+        # The pretrained model expects both past and future values
+        dummy_future = torch.zeros(
+            batch_size, 1, x.shape[-1], device=x.device, dtype=x.dtype
+        )
+
+        try:
+            # Use the pretrained model
+            outputs = self.patchtst(
+                past_values=x,
+                future_values=dummy_future,
+                output_hidden_states=True,
+                return_dict=True,
+            )
+
+            # Get the last hidden state
+            if hasattr(outputs, "last_hidden_state"):
+                hidden_states = outputs.last_hidden_state  # [B, T, D]
+            else:
+                # Fallback: use the prediction head's input
+                hidden_states = outputs.hidden_states[-1]  # [B, T, D]
+
+            # Global average pooling
+            pooled = hidden_states.mean(dim=1)  # [B, D]
+
+        except Exception as e:
+            print(f"Error in PatchTST forward: {e}")
+            # Fallback to simple averaging and project to expected dimension
+            pooled = x.mean(dim=1)  # [B, C]
+            # Project to hidden_size to match classifier input expectation
+            hidden_size = self.patchtst.config.hidden_size
+            if pooled.shape[-1] != hidden_size:
+                # Add a projection layer if dimensions don't match
+                if not hasattr(self, "fallback_proj"):
+                    self.fallback_proj = nn.Linear(pooled.shape[-1], hidden_size).to(
+                        pooled.device
+                    )
+                pooled = self.fallback_proj(pooled)
+
+        # Classification
+        logits = self.classifier(pooled)
+        return logits
 
     def training_step(self, batch, batch_idx):
         out = self(batch["x_num"], batch.get("x_cat"))
-        loss = self.loss_fn(out, batch["y"])
+        targets = batch["y"]
+        # handle one-hot labels
+        if targets.ndim > 1:
+            targets = torch.argmax(targets, dim=1)
+        if targets.dtype != torch.long:
+            targets = targets.long()
+        loss = self.loss_fn(out, targets)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         out = self(batch["x_num"], batch.get("x_cat"))
-        loss = self.loss_fn(out, batch["y"])
+        targets = batch["y"]
+        # handle one-hot labels
+        if targets.ndim > 1:
+            targets = torch.argmax(targets, dim=1)
+        if targets.dtype != torch.long:
+            targets = targets.long()
+
+        loss = self.loss_fn(out, targets)
         self.log("val_loss", loss)
 
         # Calculate accuracy
         preds = torch.argmax(out, dim=1)
-        acc = (preds == batch["y"]).float().mean()
+        acc = (preds == targets).float().mean()
         self.log("val_acc", acc)
 
-        return {"val_loss": loss, "preds": preds, "labels": batch["y"]}
+        return {"val_loss": loss, "preds": preds, "labels": targets}
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        return torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=0.01)
 
 
 class CNNClassifier(pl.LightningModule):
@@ -169,20 +248,32 @@ class CNNClassifier(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         out = self(batch["x_num"], batch.get("x_cat"))
-        loss = self.loss_fn(out, batch["y"])
+        targets = batch["y"]
+        # handle one-hot labels
+        if targets.ndim > 1:
+            targets = torch.argmax(targets, dim=1)
+        if targets.dtype != torch.long:
+            targets = targets.long()
+        loss = self.loss_fn(out, targets)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         out = self(batch["x_num"], batch.get("x_cat"))
-        loss = self.loss_fn(out, batch["y"])
+        targets = batch["y"]
+        # handle one-hot labels
+        if targets.ndim > 1:
+            targets = torch.argmax(targets, dim=1)
+        if targets.dtype != torch.long:
+            targets = targets.long()
+        loss = self.loss_fn(out, targets)
         self.log("val_loss", loss)
 
         preds = torch.argmax(out, dim=1)
-        acc = (preds == batch["y"]).float().mean()
+        acc = (preds == targets).float().mean()
         self.log("val_acc", acc)
 
-        return {"val_loss": loss, "preds": preds, "labels": batch["y"]}
+        return {"val_loss": loss, "preds": preds, "labels": targets}
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -340,24 +431,22 @@ def main():
     duet_results = train_model(duet_model, dm, "DuET", max_epochs=MAX_EPOCHS)
     results.append(duet_results)
 
-    # 2. Train PatchTST
+    # 2. Train HuggingFace PatchTST
     print("\\n" + "=" * 60)
-    print("Training PatchTST...")
+    print("Training HuggingFace PatchTST...")
     print("=" * 60)
 
-    patchtst_model = PatchTSTClassifier(
+    patchtst_model = HFPatchTSTClassifier(
         c_in=c_in,
         seq_len=seq_len,
         num_classes=num_classes,
-        patch_len=16,
-        stride=8,
-        d_model=64,
-        nhead=4,
-        num_layers=3,
+        lr=1e-3,
+        dropout=0.1,
+        use_pretrained=True,
     )
 
     patchtst_results = train_model(
-        patchtst_model, dm, "PatchTST", max_epochs=MAX_EPOCHS
+        patchtst_model, dm, "HF-PatchTST", max_epochs=MAX_EPOCHS
     )
     results.append(patchtst_results)
 
