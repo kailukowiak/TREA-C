@@ -11,5 +11,9 @@ wheels/
 .env
 lightning_logs/
 logs/
+# Ignore data folders but not duet/data Python modules
 data/
+!duet/data/
+duet/data/*
+!duet/data/*.py
 checkpoints/
