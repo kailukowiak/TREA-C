@@ -98,8 +98,11 @@ class DualPatchTransformer(pl.LightningModule):
         z_num = self.num_proj(x_num2)  # [B, d_model, T]
 
         # 5. add categorical embeddings
-        cat_vec = sum(emb(x_cat[:, i]) for i, emb in enumerate(self.cat_embs))
-        z = z_num + cat_vec.permute(0, 2, 1)  # align dims
+        if len(self.cat_embs) > 0:
+            cat_vec = sum(emb(x_cat[:, i]) for i, emb in enumerate(self.cat_embs))
+            z = z_num + cat_vec.permute(0, 2, 1)  # align dims
+        else:
+            z = z_num
 
         # 6. transformer + pooling
         z = z.permute(0, 2, 1)  # [B, T, d_model]

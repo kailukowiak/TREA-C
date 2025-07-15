@@ -1,10 +1,6 @@
-"""Compare DuET with PatchTST and other models on NASA Turbofan dataset."""
+"""Compare DuET with PatchTST and other models on ETTh1 dataset."""
 
 import sys
-
-
-sys.path.append(".")
-
 import time
 
 import pandas as pd
@@ -16,9 +12,13 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from sklearn.metrics import accuracy_score, f1_score
 
+
+sys.path.append(".")
+
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
-from duet.data.nasa_turbofan import NASATurbofanDataset
+from duet.data.etth1 import ETTh1Dataset
 from duet.models.transformer import DualPatchTransformer
+from examples.hf_patchtst_classifier import HFPatchTSTClassifier
 
 
 class PatchTSTClassifier(pl.LightningModule):
@@ -188,7 +188,7 @@ class CNNClassifier(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-def train_model(model, dm, model_name, max_epochs=30):
+def train_model(model, dm, model_name, max_epochs=10):
     """Train a model and return results."""
 
     # Callbacks
@@ -200,12 +200,10 @@ def train_model(model, dm, model_name, max_epochs=30):
         mode="min",
     )
 
-    early_stop = EarlyStopping(monitor="val_loss", patience=10, mode="min")
+    early_stop = EarlyStopping(monitor="val_loss", patience=5, mode="min")
 
     # Logger
-    logger = TensorBoardLogger(
-        save_dir="logs", name=f"turbofan_comparison/{model_name}"
-    )
+    logger = TensorBoardLogger(save_dir="logs", name=f"etth1_comparison/{model_name}")
 
     # Trainer
     trainer = pl.Trainer(
@@ -269,61 +267,34 @@ def train_model(model, dm, model_name, max_epochs=30):
 
 def main():
     print("=" * 80)
-    print("Model Comparison on NASA Turbofan Dataset")
+    print("Model Comparison on ETTh1 Dataset")
     print("=" * 80)
-    
+
     # Training configuration
-    MAX_EPOCHS = 10
+    MAX_EPOCHS = 15
+    SEQUENCE_LENGTH = 96
+    NUM_CLASSES = 3
 
     # Load dataset
-    print("\nLoading NASA Turbofan dataset...")
-    try:
-        train_dataset = NASATurbofanDataset(
-            data_dir="./data/nasa_cmapss",
-            subset="FD001",
-            train=True,
-            sequence_length=50,
-            task="classification",
-            num_classes=3,
-            download=True,
-        )
+    print("\\nLoading ETTh1 dataset...")
 
-        val_dataset = NASATurbofanDataset(
-            data_dir="./data/nasa_cmapss",
-            subset="FD001",
-            train=False,
-            sequence_length=50,
-            task="classification",
-            num_classes=3,
-            download=False,
-        )
+    train_dataset = ETTh1Dataset(
+        data_dir="./data/etth1",
+        train=True,
+        sequence_length=SEQUENCE_LENGTH,
+        task="classification",
+        num_classes=NUM_CLASSES,
+        download=True,
+    )
 
-    except Exception as e:
-        print(f"Error loading dataset: {e}")
-        print("Using synthetic fallback...")
-
-        from duet.data.dataset import SyntheticTimeSeriesDataset
-
-        train_dataset = SyntheticTimeSeriesDataset(
-            num_samples=5000,
-            T=50,
-            C_num=21,
-            C_cat=2,
-            cat_cardinalities=[5, 5],
-            num_classes=3,
-            task="classification",
-            missing_ratio=0.0,
-        )
-        val_dataset = SyntheticTimeSeriesDataset(
-            num_samples=1000,
-            T=50,
-            C_num=21,
-            C_cat=2,
-            cat_cardinalities=[5, 5],
-            num_classes=3,
-            task="classification",
-            missing_ratio=0.0,
-        )
+    val_dataset = ETTh1Dataset(
+        data_dir="./data/etth1",
+        train=False,
+        sequence_length=SEQUENCE_LENGTH,
+        task="classification",
+        num_classes=NUM_CLASSES,
+        download=False,
+    )
 
     print(f"Train samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
@@ -337,12 +308,12 @@ def main():
     )
 
     # Get data dimensions
-    sample = train_dataset[0]
-    c_in = sample["x_num"].shape[0]
-    seq_len = sample["x_num"].shape[1]
-    num_classes = 3
+    feature_info = train_dataset.get_feature_info()
+    c_in = feature_info["n_numeric"]
+    seq_len = feature_info["sequence_length"]
+    num_classes = feature_info["num_classes"]
 
-    print("\nDataset info:")
+    print("\\nDataset info:")
     print(f"- Input channels: {c_in}")
     print(f"- Sequence length: {seq_len}")
     print(f"- Number of classes: {num_classes}")
@@ -350,14 +321,14 @@ def main():
     results = []
 
     # 1. Train DuET (our model)
-    print("\n" + "=" * 60)
+    print("\\n" + "=" * 60)
     print("Training DuET (Dual-Patch Transformer)...")
     print("=" * 60)
 
     duet_model = DualPatchTransformer(
         C_num=c_in,
-        C_cat=2,
-        cat_cardinalities=[5, 5],
+        C_cat=0,  # No categorical features in ETTh1
+        cat_cardinalities=[],
         T=seq_len,
         d_model=64,
         nhead=4,
@@ -370,7 +341,7 @@ def main():
     results.append(duet_results)
 
     # 2. Train PatchTST
-    print("\n" + "=" * 60)
+    print("\\n" + "=" * 60)
     print("Training PatchTST...")
     print("=" * 60)
 
@@ -378,18 +349,20 @@ def main():
         c_in=c_in,
         seq_len=seq_len,
         num_classes=num_classes,
-        patch_len=10,
-        stride=5,
+        patch_len=16,
+        stride=8,
         d_model=64,
         nhead=4,
         num_layers=3,
     )
 
-    patchtst_results = train_model(patchtst_model, dm, "PatchTST", max_epochs=MAX_EPOCHS)
+    patchtst_results = train_model(
+        patchtst_model, dm, "PatchTST", max_epochs=MAX_EPOCHS
+    )
     results.append(patchtst_results)
 
     # 3. Train CNN baseline
-    print("\n" + "=" * 60)
+    print("\\n" + "=" * 60)
     print("Training 1D CNN Baseline...")
     print("=" * 60)
 
@@ -409,18 +382,18 @@ def main():
     df = pd.DataFrame(results)
 
     # Display results
-    print("\n" + "=" * 80)
+    print("\\n" + "=" * 80)
     print("RESULTS COMPARISON")
     print("=" * 80)
     print(df.to_string(index=False))
 
     # Save to CSV
-    csv_filename = "turbofan_model_comparison.csv"
+    csv_filename = "etth1_model_comparison.csv"
     df.to_csv(csv_filename, index=False)
-    print(f"\nResults saved to: {csv_filename}")
+    print(f"\\nResults saved to: {csv_filename}")
 
     # Create a summary
-    print("\n" + "=" * 60)
+    print("\\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
 
