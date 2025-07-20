@@ -52,7 +52,7 @@ class AirQualityDataset(Dataset):
         self.task = task
         self.nan_rate = nan_rate
         
-        if download and not self.data_dir.exists():
+        if download and not (self.data_dir / f"{self.split}_data.npy").exists():
             self._download_and_prepare()
         
         self.data, self.labels = self._load_data()
