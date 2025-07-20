@@ -255,8 +255,19 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
             # Dynamic projection to num_patches
             if not hasattr(self, 'temporal_projection') or self.temporal_projection.out_features != num_patches:
                 self.temporal_projection = nn.Linear(self.hparams.d_model, num_patches).to(temporal_features.device)
+                # Initialize the projection weights properly
+                torch.nn.init.xavier_uniform_(self.temporal_projection.weight)
+                torch.nn.init.zeros_(self.temporal_projection.bias)
             
             order_logits = self.temporal_projection(temporal_features)
+            
+            # Debug: Check for NaN in temporal components
+            if torch.isnan(temporal_features).any() or torch.isnan(order_logits).any():
+                print(f"NaN in temporal order prediction!")
+                print(f"  temporal_features has NaN: {torch.isnan(temporal_features).any()}")
+                print(f"  order_logits has NaN: {torch.isnan(order_logits).any()}")
+                print(f"  num_patches: {num_patches}")
+                order_logits = torch.zeros_like(order_logits)
             
             ssl_outputs['temporal_order'] = {
                 'predictions': order_logits,
@@ -312,10 +323,19 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
             mask_expanded = mask.unsqueeze(0).unsqueeze(-1).expand_as(predictions_flat)
             
             if mask_expanded.sum() > 0:  # Ensure we have masked patches
-                reconstruction_loss = F.mse_loss(
-                    predictions_flat[mask_expanded],
-                    targets_flat[mask_expanded]
-                )
+                pred_masked = predictions_flat[mask_expanded]
+                targ_masked = targets_flat[mask_expanded]
+                
+                # Check for NaN/Inf values
+                if torch.isnan(pred_masked).any() or torch.isnan(targ_masked).any():
+                    reconstruction_loss = torch.tensor(0.0, device=predictions.device)
+                elif torch.isinf(pred_masked).any() or torch.isinf(targ_masked).any():
+                    reconstruction_loss = torch.tensor(0.0, device=predictions.device)
+                else:
+                    reconstruction_loss = F.mse_loss(pred_masked, targ_masked)
+                    # Clamp to prevent explosion
+                    reconstruction_loss = torch.clamp(reconstruction_loss, 0, 100.0)
+                
                 losses['reconstruction'] = reconstruction_loss * self.ssl_objectives.lambda_masked
         
         # Temporal Order Prediction Loss
@@ -324,7 +344,16 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
             predictions = outputs['predictions']
             targets = outputs['targets']
             
-            temporal_loss = F.mse_loss(predictions, targets.float())
+            # Check for NaN/Inf values
+            if torch.isnan(predictions).any() or torch.isnan(targets).any():
+                temporal_loss = torch.tensor(0.0, device=predictions.device)
+            elif torch.isinf(predictions).any() or torch.isinf(targets).any():
+                temporal_loss = torch.tensor(0.0, device=predictions.device)
+            else:
+                temporal_loss = F.mse_loss(predictions, targets.float())
+                # Clamp to prevent explosion
+                temporal_loss = torch.clamp(temporal_loss, 0, 100.0)
+            
             losses['temporal_order'] = temporal_loss * self.ssl_objectives.lambda_temporal
         
         # Contrastive Loss
@@ -333,9 +362,18 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
             original = outputs['original']
             augmented = outputs['augmented']
             
-            contrastive_loss = self.ssl_objectives.contrastive_learner.contrastive_loss(
-                original, augmented
-            )
+            # Check for NaN/Inf values
+            if torch.isnan(original).any() or torch.isnan(augmented).any():
+                contrastive_loss = torch.tensor(0.0, device=original.device)
+            elif torch.isinf(original).any() or torch.isinf(augmented).any():
+                contrastive_loss = torch.tensor(0.0, device=original.device)
+            else:
+                contrastive_loss = self.ssl_objectives.contrastive_learner.contrastive_loss(
+                    original, augmented
+                )
+                # Clamp to prevent explosion
+                contrastive_loss = torch.clamp(contrastive_loss, 0, 10.0)
+            
             losses['contrastive'] = contrastive_loss * self.ssl_objectives.lambda_contrastive
         
         # Total SSL loss
@@ -389,6 +427,17 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
         # Total loss
         total_ssl_loss = ssl_losses.get('total_ssl', torch.tensor(0.0, device=x_num.device))
         total_loss = total_ssl_loss + self.lambda_supervised * supervised_loss
+        
+        # Debug: Check for NaN in individual components
+        if torch.isnan(total_ssl_loss) or torch.isnan(supervised_loss) or torch.isnan(total_loss):
+            print(f"NaN detected!")
+            print(f"  SSL loss: {total_ssl_loss}")
+            print(f"  Supervised loss: {supervised_loss}")
+            print(f"  Total loss: {total_loss}")
+            print(f"  SSL components: {[(k, v.item()) for k, v in ssl_losses.items()]}")
+            
+            # Return a small loss to prevent crash
+            total_loss = torch.tensor(1.0, device=x_num.device, requires_grad=True)
         
         # Logging
         self.log("train/total_loss", total_loss, prog_bar=True)

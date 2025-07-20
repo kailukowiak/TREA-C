@@ -194,7 +194,7 @@ def main():
     parser.add_argument("--num_layers", type=int, default=3, help="Number of transformer layers")
     parser.add_argument("--patch_len", type=int, default=16, help="Patch length")
     parser.add_argument("--stride", type=int, default=8, help="Patch stride")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     
     # SSL objective parameters
     parser.add_argument("--use_masked_patch", action="store_true", help="Use masked patch prediction")
@@ -224,7 +224,7 @@ def main():
     # Device parameters
     parser.add_argument("--accelerator", type=str, default="auto", help="Accelerator type")
     parser.add_argument("--devices", type=str, default="auto", help="Number of devices")
-    parser.add_argument("--precision", type=str, default="16-mixed", help="Training precision")
+    parser.add_argument("--precision", type=str, default="32", help="Training precision")
     
     args = parser.parse_args()
     
@@ -284,7 +284,8 @@ def main():
         precision=args.precision,
         logger=logger,
         callbacks=[checkpoint_callback, early_stop_callback],
-        gradient_clip_val=1.0,
+        gradient_clip_val=0.5,
+        gradient_clip_algorithm="norm",
         accumulate_grad_batches=1,
         log_every_n_steps=50,
         val_check_interval=0.5,  # Check validation twice per epoch
