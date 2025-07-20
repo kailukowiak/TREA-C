@@ -295,9 +295,7 @@ def main():
     )
     if abs(column_acc - baseline_acc) <= 0.05:  # Within 5%
         print("   🚀 READY FOR MULTI-DATASET TRAINING!")
-        print(
-            "      Small performance trade-off acceptable for transferability gains."
-        )
+        print("      Small performance trade-off acceptable for transferability gains.")
     else:
         print("   ⚠️  Consider tuning column embedding integration.")
 

@@ -1,6 +1,5 @@
 """Unit tests for column embeddings module."""
 
-
 from duet.models.column_embeddings import ColumnEmbedding, create_column_embedding
 
 

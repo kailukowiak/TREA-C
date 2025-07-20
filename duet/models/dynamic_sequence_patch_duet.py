@@ -1,7 +1,5 @@
 """Dynamic sequence length PatchDuET for true multi-dataset training."""
 
-from typing import List, Optional
-
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -11,7 +9,7 @@ from .multi_dataset_embeddings import create_multi_dataset_embedder
 
 class DynamicSequencePatchDuET(pl.LightningModule):
     """PatchDuET with dynamic sequence length support.
-    
+
     Key improvements:
     - Handles any sequence length dynamically
     - No pre-set sequence length requirements
@@ -69,26 +67,27 @@ class DynamicSequencePatchDuET(pl.LightningModule):
         # Column embeddings
         self.use_column_embeddings = column_embedding_strategy != "none"
         self.column_embedder = None
-        
+
         if self.use_column_embeddings:
             embedder_args = {"target_dim": 1, **embedder_kwargs}
-            
+
             if column_embedding_strategy == "frozen_bert":
                 embedder_args.update({"bert_model": bert_model})
             elif column_embedding_strategy == "auto_expanding":
-                embedder_args.update({
-                    "embedding_dim": column_embedding_dim,
-                    "initial_vocab_size": initial_vocab_size,
-                })
-            
+                embedder_args.update(
+                    {
+                        "embedding_dim": column_embedding_dim,
+                        "initial_vocab_size": initial_vocab_size,
+                    }
+                )
+
             self.column_embedder = create_multi_dataset_embedder(
-                strategy=column_embedding_strategy,
-                **embedder_args
+                strategy=column_embedding_strategy, **embedder_args
             )
 
         # Input channels: 2×c_in (value+mask) or 3×c_in (value+mask+column)
         input_channels_per_feature = 3 if self.use_column_embeddings else 2
-        
+
         # Patch embedding (dynamic number of patches)
         self.patch_embedding = nn.Linear(
             patch_len * (input_channels_per_feature * c_in), d_model
@@ -112,7 +111,7 @@ class DynamicSequencePatchDuET(pl.LightningModule):
             self.head = nn.Linear(d_model, 1)
             self.loss_fn = nn.MSELoss()
 
-    def set_dataset_columns(self, column_names: List[str]) -> None:
+    def set_dataset_columns(self, column_names: list[str]) -> None:
         """Set column names for the current dataset."""
         if self.column_embedder is not None:
             self.column_embedder.set_columns(column_names)
@@ -122,40 +121,40 @@ class DynamicSequencePatchDuET(pl.LightningModule):
 
     def create_patches(self, x):
         """Create patches from input tensor with dynamic sequence length.
-        
+
         Args:
             x: Input tensor [batch_size, channels, sequence_length]
-            
+
         Returns:
             Patches tensor [batch_size, num_patches, patch_len * channels]
         """
         batch_size, channels, seq_len = x.shape
-        
+
         # Calculate number of patches dynamically
         num_patches = (seq_len - self.patch_len) // self.stride + 1
-        
+
         if num_patches <= 0:
             raise ValueError(
                 f"Sequence length {seq_len} too short for patch_len={self.patch_len}. "
                 f"Need at least {self.patch_len} timesteps."
             )
-        
+
         # Create patches using unfold
         patches = x.unfold(dimension=2, size=self.patch_len, step=self.stride)
         # patches: [batch_size, channels, num_patches, patch_len]
-        
+
         # Reshape to [batch_size, num_patches, channels * patch_len]
         patches = patches.permute(0, 2, 1, 3).contiguous()
         patches = patches.view(batch_size, num_patches, channels * self.patch_len)
-        
+
         return patches
 
     def get_positional_encoding(self, num_patches: int):
         """Get positional encoding for the given number of patches.
-        
+
         Args:
             num_patches: Number of patches in current input
-            
+
         Returns:
             Positional encoding [1, num_patches, d_model]
         """
@@ -164,16 +163,16 @@ class DynamicSequencePatchDuET(pl.LightningModule):
                 f"Sequence too long: {num_patches} patches exceeds maximum "
                 f"{self.pos_embedding.shape[1]}. Increase max_sequence_length."
             )
-        
+
         return self.pos_embedding[:, :num_patches, :]
 
     def forward(self, x_num, x_cat=None):
         """Forward pass with dynamic sequence length support.
-        
+
         Args:
             x_num: Numeric data [batch_size, c_in, sequence_length]
             x_cat: Categorical data (unused)
-            
+
         Returns:
             Model output
         """
@@ -191,7 +190,9 @@ class DynamicSequencePatchDuET(pl.LightningModule):
             x_processed = torch.cat([x_val, m_nan], dim=1)  # [B, 2*C, T]
 
         # 3. Create patches (dynamic based on input sequence length)
-        patches = self.create_patches(x_processed)  # [B, num_patches, patch_len * (2 or 3)*C]
+        patches = self.create_patches(
+            x_processed
+        )  # [B, num_patches, patch_len * (2 or 3)*C]
         num_patches = patches.shape[1]
 
         # 4. Patch embedding
@@ -202,7 +203,9 @@ class DynamicSequencePatchDuET(pl.LightningModule):
         patch_embeddings = patch_embeddings + pos_enc
 
         # 6. Transformer
-        transformer_out = self.transformer(patch_embeddings)  # [B, num_patches, d_model]
+        transformer_out = self.transformer(
+            patch_embeddings
+        )  # [B, num_patches, d_model]
 
         # 7. Global average pooling (handles variable patch counts)
         pooled = transformer_out.mean(dim=1)  # [B, d_model]
@@ -255,16 +258,16 @@ class DynamicSequencePatchDuET(pl.LightningModule):
         """Get statistics about the column embedder."""
         if self.column_embedder is None:
             return {"strategy": "none"}
-        
+
         stats = {"strategy": self.column_embedding_strategy}
-        
+
         if hasattr(self.column_embedder, "get_cache_stats"):
             stats.update(self.column_embedder.get_cache_stats())
-        
+
         if hasattr(self.column_embedder, "embedding"):
             stats["vocab_size"] = self.column_embedder.embedding.num_embeddings
             stats["next_idx"] = self.column_embedder.next_idx
-        
+
         return stats
 
     @classmethod
@@ -272,64 +275,64 @@ class DynamicSequencePatchDuET(pl.LightningModule):
         cls,
         c_in: int,
         num_classes: int,
-        column_names: List[str],
+        column_names: list[str],
         strategy: str = "auto_expanding",
-        **kwargs
+        **kwargs,
     ) -> "DynamicSequencePatchDuET":
         """Factory method to create model for a dataset (no fixed sequence length)."""
         model = cls(
             c_in=c_in,
             num_classes=num_classes,
             column_embedding_strategy=strategy,
-            **kwargs
+            **kwargs,
         )
-        
+
         # Set columns for this dataset
         model.set_dataset_columns(column_names)
-        
+
         return model
 
     @classmethod
     def create_baseline(
-        cls,
-        c_in: int,
-        num_classes: int,
-        **kwargs
+        cls, c_in: int, num_classes: int, **kwargs
     ) -> "DynamicSequencePatchDuET":
         """Create baseline model without column embeddings."""
         return cls(
             c_in=c_in,
             num_classes=num_classes,
             column_embedding_strategy="none",
-            **kwargs
+            **kwargs,
         )
 
 
 if __name__ == "__main__":
     # Test dynamic sequence lengths
     print("Testing DynamicSequencePatchDuET...")
-    
+
     model = DynamicSequencePatchDuET.create_for_dataset(
         c_in=4,
         num_classes=3,
         column_names=["temp", "humidity", "pressure", "wind"],
-        strategy="auto_expanding"
+        strategy="auto_expanding",
     )
-    
+
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
-    
+
     # Test different sequence lengths
     sequence_lengths = [32, 64, 96, 128, 256]
-    
+
     for seq_len in sequence_lengths:
         try:
             x = torch.randn(8, 4, seq_len)  # [batch, channels, time]
-            x[0, :2, :10] = float('nan')  # Add some NaNs
-            
+            x[0, :2, :10] = float("nan")  # Add some NaNs
+
             output = model(x)
             num_patches = (seq_len - model.patch_len) // model.stride + 1
-            
-            print(f"Seq len {seq_len:3d} -> {num_patches:2d} patches -> output {output.shape}")
-            
+
+            print(
+                f"Seq len {seq_len:3d} -> {num_patches:2d} patches -> "
+                f"output {output.shape}"
+            )
+
         except Exception as e:
             print(f"Seq len {seq_len:3d} -> ERROR: {e}")
