@@ -20,7 +20,7 @@ class DualPatchTransformer(pl.LightningModule):
         d_model: int = 64,
         task: str = "classification",
         num_classes: int | None = 3,
-        nhead: int = 4,
+        n_head: int = 4,
         num_layers: int = 2,
         lr: float = 1e-3,
         pooling: str = "mean",
@@ -37,7 +37,7 @@ class DualPatchTransformer(pl.LightningModule):
             task: 'classification' or 'regression'
             num_classes: Number of classes for classification
                 (required if task='classification')
-            nhead: Number of attention heads
+            n_head: Number of attention heads
             num_layers: Number of transformer layers
             lr: Learning rate
             pooling: Pooling strategy ('mean', 'last', 'cls')
@@ -79,7 +79,7 @@ class DualPatchTransformer(pl.LightningModule):
 
         # Temporal encoder
         enc_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True, dropout=dropout
+            d_model=d_model, n_head=n_head, batch_first=True, dropout=dropout
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
 

@@ -123,7 +123,7 @@ def main():
         cat_cardinalities=feature_info["cat_cardinalities"],
         T=100,
         d_model=96,
-        nhead=6,
+        n_head=6,
         num_layers=4,
         task="classification",
         num_classes=4,

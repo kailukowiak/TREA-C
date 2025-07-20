@@ -65,7 +65,7 @@ x_num = self.input_norm(x_num.transpose(1, 2)).transpose(1, 2)
 # Recommended hyperparameters
 d_model = 128        # Increase from 64
 num_layers = 4       # Increase from 3
-nhead = 8           # Increase from 4
+n_headd = 8           # Increase from 4
 dropout = 0.2       # Increase from 0.1
 lr = 5e-4           # Decrease from 1e-3
 pooling = "cls"     # Change from "mean"
@@ -147,7 +147,7 @@ z = z + self.pos_encoding[:, :z.size(1), :]
 
 1. **CRITICAL**: Fix dual-patch encoding for datasets without missing values
 2. **HIGH**: Add input normalization and class weighting
-3. **HIGH**: Increase model capacity (d_model, num_layers, nhead)
+3. **HIGH**: Increase model capacity (d_model, num_layers, n_head)
 4. **MEDIUM**: Add positional encoding and CLS token
 5. **LOW**: Implement patch-based processing
 

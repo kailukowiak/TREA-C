@@ -156,7 +156,7 @@ class PatchTSTClassifier(pl.LightningModule):
         patch_len: int = 16,
         stride: int = 8,
         d_model: int = 128,
-        nhead: int = 8,
+        n_head: int = 8,
         num_layers: int = 3,
         lr: float = 1e-3,
     ):
@@ -176,7 +176,7 @@ class PatchTSTClassifier(pl.LightningModule):
 
         # Transformer
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True, norm_first=True
+            d_model=d_model, n_head=n_head, batch_first=True, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
@@ -351,7 +351,7 @@ class PatchTSTNan(pl.LightningModule):
         patch_len: int = 16,
         stride: int = 8,
         d_model: int = 128,
-        nhead: int = 8,
+        n_head: int = 8,
         num_layers: int = 3,
         lr: float = 1e-3,
     ):
@@ -371,7 +371,7 @@ class PatchTSTNan(pl.LightningModule):
 
         # Transformer
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True, norm_first=True
+            d_model=d_model, n_head=n_head, batch_first=True, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
@@ -594,7 +594,7 @@ def main():
         cat_cardinalities=[],
         T=seq_len,
         d_model=128,  # Increased from 64 to match PatchTST
-        nhead=8,  # Increased from 4 to match PatchTST
+        n_head=8,  # Increased from 4 to match PatchTST
         num_layers=3,
         task="classification",
         num_classes=num_classes,
@@ -635,7 +635,7 @@ def main():
         patch_len=16,
         stride=8,
         d_model=128,
-        nhead=8,
+        n_head=8,
         num_layers=3,
         lr=1e-3,
     )
@@ -674,7 +674,7 @@ def main():
         patch_len=16,
         stride=8,
         d_model=128,
-        nhead=8,
+        n_head=8,
         num_layers=3,
         lr=1e-3,
     )

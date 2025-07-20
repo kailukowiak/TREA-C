@@ -44,7 +44,7 @@ def main():
         cat_cardinalities=[1, 1],  # Dummy
         T=128,  # HAR uses 128 timesteps (2.56 seconds at 50Hz)
         d_model=64,
-        nhead=4,
+        n_head=4,
         num_layers=3,
         task="classification",
         num_classes=6,  # 6 activities

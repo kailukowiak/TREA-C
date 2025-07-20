@@ -137,7 +137,7 @@ class DualPatchTransformer(pl.LightningModule):
         self.num_proj = nn.Conv1d(C_num * 2, d_model, kernel_size=1)
 
         # Temporal encoder
-        enc_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=4,
+        enc_layer = nn.TransformerEncoderLayer(d_model=d_model, n_head=4,
                                                batch_first=True)
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=2)
 

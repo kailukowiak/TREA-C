@@ -30,7 +30,7 @@ class PatchTSTNan(pl.LightningModule):
         patch_len: int = 16,
         stride: int = 8,
         d_model: int = 128,
-        nhead: int = 8,
+        n_head: int = 8,
         num_layers: int = 3,
         lr: float = 1e-3,
     ):
@@ -50,7 +50,7 @@ class PatchTSTNan(pl.LightningModule):
 
         # Transformer
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, batch_first=True, norm_first=True
+            d_model=d_model, n_head=n_head, batch_first=True, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
@@ -318,7 +318,7 @@ def main():
         d_model=128,
         task="classification",
         num_classes=num_classes,
-        nhead=8,
+        n_head=8,
         num_layers=3,
         lr=1e-3,
         pooling="mean",
@@ -340,7 +340,7 @@ def main():
         patch_len=16,
         stride=8,
         d_model=128,
-        nhead=8,
+        n_head=8,
         num_layers=3,
         lr=1e-3,
     )
@@ -362,8 +362,7 @@ def main():
     # Save results
     df.to_csv(f"etth1_duet_vs_patchtstnan_nan{int(NAN_RATE * 100)}pct.csv", index=False)
     print(
-        f"\nResults saved to: etth1_duet_vs_patchtstnan_nan"
-        f"{int(NAN_RATE * 100)}pct.csv"
+        f"\nResults saved to: etth1_duet_vs_patchtstnan_nan{int(NAN_RATE * 100)}pct.csv"
     )
 
     # Summary

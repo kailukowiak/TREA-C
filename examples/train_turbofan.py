@@ -109,7 +109,7 @@ def main():
         cat_cardinalities=feature_info["cat_cardinalities"],
         T=train_dataset[0]["x_num"].shape[1],  # sequence length
         d_model=128,  # Larger model for complex data
-        nhead=8,
+        n_head=8,
         num_layers=4,
         task="classification",
         num_classes=3,

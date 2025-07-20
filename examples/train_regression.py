@@ -33,7 +33,7 @@ def main():
         T=100,
         d_model=64,
         task="regression",  # Regression task
-        nhead=4,
+        n_head=4,
         num_layers=3,
         lr=1e-3,
     )

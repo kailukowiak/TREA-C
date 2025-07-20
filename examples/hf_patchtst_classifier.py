@@ -1,6 +1,5 @@
 """HuggingFace PatchTST wrapper for classification tasks."""
 
-
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -18,7 +17,7 @@ class HFPatchTSTClassifier(pl.LightningModule):
         num_classes: int,
         d_model: int = 64,
         num_layers: int = 3,
-        nhead: int = 4,
+        n_head: int = 4,
         patch_len: int = 16,
         stride: int = 8,
         lr: float = 1e-3,
@@ -41,7 +40,7 @@ class HFPatchTSTClassifier(pl.LightningModule):
             patch_length=patch_len,
             patch_stride=stride,
             num_hidden_layers=num_layers,
-            num_attention_heads=nhead,
+            num_attention_heads=n_head,
             hidden_size=d_model,
             intermediate_size=d_model * 4,
             hidden_dropout_prob=dropout,

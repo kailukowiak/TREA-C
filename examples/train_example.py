@@ -68,7 +68,7 @@ def main():
         d_model=64,
         task="classification",
         num_classes=3,
-        nhead=4,
+        n_head=4,
         num_layers=2,
         lr=1e-3,
     )
