@@ -1,8 +1,12 @@
 """Dual-Patch Transformer model implementation."""
 
+from typing import Any
+
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+
+from .column_embeddings import ColumnEmbedding
 
 
 class DualPatchTransformer(pl.LightningModule):
@@ -25,6 +29,9 @@ class DualPatchTransformer(pl.LightningModule):
         lr: float = 1e-3,
         pooling: str = "mean",
         dropout: float = 0.1,
+        column_names: list[str] | None = None,
+        use_column_embeddings: bool = False,
+        column_embedding_config: dict[str, Any] | None = None,
     ):
         """Initialize the Dual-Patch Transformer.
 
@@ -42,6 +49,9 @@ class DualPatchTransformer(pl.LightningModule):
             lr: Learning rate
             pooling: Pooling strategy ('mean', 'last', 'cls')
             dropout: Dropout rate
+            column_names: List of column names for semantic embeddings
+            use_column_embeddings: Whether to use column semantic embeddings
+            column_embedding_config: Configuration for column embeddings
         """
         super().__init__()
         self.save_hyperparameters()
@@ -51,6 +61,8 @@ class DualPatchTransformer(pl.LightningModule):
         self.lr = lr
         self.pooling = pooling
         self.T = T
+        self.use_column_embeddings = use_column_embeddings
+        self.column_names = column_names
 
         # Validate inputs
         if len(cat_cardinalities) != C_cat:
@@ -64,14 +76,33 @@ class DualPatchTransformer(pl.LightningModule):
             raise ValueError(
                 f"pooling must be one of ['mean', 'last', 'cls'], got {pooling}"
             )
+        if use_column_embeddings and column_names is None:
+            raise ValueError(
+                "column_names must be provided when use_column_embeddings=True"
+            )
+        if use_column_embeddings and len(column_names) != C_num:
+            raise ValueError(
+                f"Length of column_names ({len(column_names)}) must match C_num ({C_num})"
+            )
 
         # Categorical embeddings (time-varying) with variable cardinalities
         self.cat_embs = nn.ModuleList(
             [nn.Embedding(cardinality, d_model) for cardinality in cat_cardinalities]
         )
 
-        # Numeric projection: NOTE 2× input channels for value + mask
-        self.num_proj = nn.Conv1d(C_num * 2, d_model, kernel_size=1)
+        # Column embeddings (semantic information from column names)
+        self.column_embedder = None
+        if use_column_embeddings:
+            column_config = column_embedding_config or {}
+            self.column_embedder = ColumnEmbedding(
+                column_names=column_names,
+                target_dim=1,  # Match value/mask dimensionality
+                **column_config,
+            )
+
+        # Numeric projection: 2× or 3× input channels based on column embeddings
+        input_channels = C_num * 3 if use_column_embeddings else C_num * 2
+        self.num_proj = nn.Conv1d(input_channels, d_model, kernel_size=1)
 
         # Add CLS token if using cls pooling
         if pooling == "cls":
@@ -79,7 +110,7 @@ class DualPatchTransformer(pl.LightningModule):
 
         # Temporal encoder
         enc_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, n_head=n_head, batch_first=True, dropout=dropout
+            d_model=d_model, nhead=n_head, batch_first=True, dropout=dropout
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
 
@@ -101,15 +132,25 @@ class DualPatchTransformer(pl.LightningModule):
         Returns:
             Model output [B, num_classes] or [B, 1]
         """
+        B, C_num, T = x_num.shape
+
         # 1-2. Always use dual-patch: mask + zero-fill (consistent shape)
         m_nan = torch.isnan(x_num).float()  # [B, C_num, T]
         x_val = torch.nan_to_num(x_num, nan=0.0)  # [B, C_num, T]
 
-        # 3. stack value & mask channels (always dual-patch)
-        x_num2 = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]
+        # 3. Create triple-patch or dual-patch based on configuration
+        if self.use_column_embeddings:
+            # Get column embeddings [B, C_num, T]
+            col_emb = self.column_embedder(B, T)  # [B, C_num, T]
+            
+            # Stack value, mask, and column channels (triple-patch)
+            x_num_processed = torch.cat([x_val, m_nan, col_emb], dim=1)  # [B, 3·C_num, T]
+        else:
+            # Stack value & mask channels (dual-patch)
+            x_num_processed = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]
 
         # 4. project numeric features
-        z_num = self.num_proj(x_num2)  # [B, d_model, T]
+        z_num = self.num_proj(x_num_processed)  # [B, d_model, T]
 
         # 5. add categorical embeddings (safe summation)
         if len(self.cat_embs) > 0:
