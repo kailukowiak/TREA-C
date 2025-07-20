@@ -12,6 +12,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 
+
 # Set tokenizer parallelism to avoid warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -21,7 +22,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.etth1 import ETTh1Dataset
 from duet.models.patch_duet import PatchDuET
-from duet.utils import get_output_path, get_checkpoint_path
+from duet.utils import get_checkpoint_path, get_output_path
 
 
 def inject_nans(dataset, nan_rate=0.05):
@@ -266,10 +267,12 @@ def main():
 
     print(f"PatchDuET Baseline:          {baseline_acc:.4f} (patches + dual-patch NaN)")
     print(
-        f"PatchDuET Column-Aware:      {column_acc:.4f} (+ lightweight column embeddings)"
+        f"PatchDuET Column-Aware:      {column_acc:.4f} "
+        f"(+ lightweight column embeddings)"
     )
     print(
-        f"Performance trade-off:       {((column_acc - baseline_acc) / baseline_acc * 100):+.2f}%"
+        f"Performance trade-off:       "
+        f"{((column_acc - baseline_acc) / baseline_acc * 100):+.2f}%"
     )
 
     baseline_params = df[df["Model"] == "PatchDuET-Baseline"]["Parameters"].iloc[0]
@@ -277,23 +280,26 @@ def main():
     param_overhead = (column_params - baseline_params) / baseline_params * 100
 
     print(
-        f"\nParameter overhead:          +{param_overhead:.2f}% ({column_params - baseline_params:,} params)"
+        f"\nParameter overhead:          +{param_overhead:.2f}% ("
+        f"{column_params - baseline_params:,} params)"
     )
 
-    print(f"\n🎯 CONCLUSION:")
+    print("\n🎯 CONCLUSION:")
     print(
-        f"   ✅ Baseline PatchDuET: {baseline_acc:.1%} accuracy, {baseline_params:,} params"
+        f"   ✅ Baseline PatchDuET: {baseline_acc:.1%} accuracy, "
+        f"{baseline_params:,} params"
     )
     print(
-        f"   ✅ Column-Aware PatchDuET: {column_acc:.1%} accuracy, {column_params:,} params"
+        f"   ✅ Column-Aware PatchDuET: {column_acc:.1%} accuracy, "
+        f"{column_params:,} params"
     )
     if abs(column_acc - baseline_acc) <= 0.05:  # Within 5%
-        print(f"   🚀 READY FOR MULTI-DATASET TRAINING!")
+        print("   🚀 READY FOR MULTI-DATASET TRAINING!")
         print(
-            f"      Small performance trade-off acceptable for transferability gains."
+            "      Small performance trade-off acceptable for transferability gains."
         )
     else:
-        print(f"   ⚠️  Consider tuning column embedding integration.")
+        print("   ⚠️  Consider tuning column embedding integration.")
 
 
 if __name__ == "__main__":

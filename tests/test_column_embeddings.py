@@ -1,7 +1,5 @@
 """Unit tests for column embeddings module."""
 
-import pytest
-import torch
 
 from duet.models.column_embeddings import ColumnEmbedding, create_column_embedding
 

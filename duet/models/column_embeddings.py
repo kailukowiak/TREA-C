@@ -2,11 +2,14 @@
 
 import os
 import re
+
 from typing import Any
 
 import torch
 import torch.nn as nn
+
 from transformers import AutoModel, AutoTokenizer
+
 
 # Set tokenizer parallelism to avoid warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -36,11 +39,14 @@ class ColumnEmbedding(nn.Module):
         Args:
             column_names: List of column names to encode
             target_dim: Target embedding dimension to match value/mask channels
-            embedding_dim: Dimension for simple learned embeddings (ignored if use_bert=True)
+            embedding_dim: Dimension for simple learned embeddings
+                (ignored if use_bert=True)
             use_bert: Whether to use BERT embeddings or simple learned embeddings
             bert_model: BERT model name/path from HuggingFace (only if use_bert=True)
-            tokenization_strategy: How to tokenize column names (only if use_bert=True)
-            aggregation_strategy: How to aggregate multi-token embeddings (only if use_bert=True)
+            tokenization_strategy: How to tokenize column names (only if
+                use_bert=True)
+            aggregation_strategy: How to aggregate multi-token embeddings
+                (only if use_bert=True)
             freeze_bert: Whether to freeze BERT parameters (only if use_bert=True)
             device: Device to load models on
         """
@@ -216,7 +222,8 @@ class ColumnEmbedding(nn.Module):
         column_embs = column_embs.unsqueeze(0).unsqueeze(2)
 
         # Repeat for batch and time dimensions
-        # [1, num_columns, 1, target_dim] -> [batch_size, num_columns, sequence_length, target_dim]
+        # [1, num_columns, 1, target_dim] ->
+        # [batch_size, num_columns, sequence_length, target_dim]
         column_embs = column_embs.repeat(batch_size, 1, sequence_length, 1)
 
         # Transpose to [batch_size, num_columns, target_dim, sequence_length]

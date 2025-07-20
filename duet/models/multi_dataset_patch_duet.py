@@ -1,6 +1,5 @@
 """Multi-dataset PatchDuET with transferable column embeddings."""
 
-from typing import List, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -119,7 +118,7 @@ class MultiDatasetPatchDuET(pl.LightningModule):
             self.head = nn.Linear(d_model, 1)
             self.loss_fn = nn.MSELoss()
 
-    def set_dataset_columns(self, column_names: List[str]) -> None:
+    def set_dataset_columns(self, column_names: list[str]) -> None:
         """Set column names for the current dataset.
 
         This should be called before training/evaluation on each new dataset.
@@ -264,7 +263,7 @@ class MultiDatasetPatchDuET(pl.LightningModule):
         c_in: int,
         seq_len: int,
         num_classes: int,
-        column_names: List[str],
+        column_names: list[str],
         strategy: str = "frozen_bert",
         **kwargs,
     ) -> "MultiDatasetPatchDuET":

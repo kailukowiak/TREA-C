@@ -82,7 +82,8 @@ class DualPatchTransformer(pl.LightningModule):
             )
         if use_column_embeddings and len(column_names) != C_num:
             raise ValueError(
-                f"Length of column_names ({len(column_names)}) must match C_num ({C_num})"
+                                "Length of column_names ({len(column_names)}) "
+                "must match C_num ({C_num})"
             )
 
         # Categorical embeddings (time-varying) with variable cardinalities

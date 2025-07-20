@@ -380,14 +380,13 @@ def multi_dataset_experiment():
     bert_acc = df[df["Strategy"] == "Frozen BERT"]["Accuracy"].mean()
     auto_acc = df[df["Strategy"] == "Auto-Expanding"]["Accuracy"].mean()
 
+    bert_improvement = (bert_acc - baseline_acc) / baseline_acc * 100
+    auto_improvement = (auto_acc - baseline_acc) / baseline_acc * 100
+
     print("Average Accuracy Across Datasets:")
     print(f"  Baseline (No Columns):  {baseline_acc:.4f}")
-    print(
-        f"  Frozen BERT:           {bert_acc:.4f} ({(bert_acc - baseline_acc) / baseline_acc * 100:+.1f}%)"
-    )
-    print(
-        f"  Auto-Expanding:        {auto_acc:.4f} ({(auto_acc - baseline_acc) / baseline_acc * 100:+.1f}%)"
-    )
+    print(f"  Frozen BERT:           {bert_acc:.4f} ({bert_improvement:+.1f}%)")
+    print(f"  Auto-Expanding:        {auto_acc:.4f} ({auto_improvement:+.1f}%)")
 
     # Parameter overhead
     baseline_params = df[df["Strategy"] == "Baseline (No Columns)"]["Parameters"].iloc[
@@ -408,15 +407,13 @@ def multi_dataset_experiment():
     # Recommendations
     print("\n🎯 RECOMMENDATIONS:")
     if bert_acc > baseline_acc:
-        print(
-            f"   ✅ Frozen BERT shows {((bert_acc - baseline_acc) / baseline_acc * 100):+.1f}% improvement!"
-        )
+        bert_improvement = (bert_acc - baseline_acc) / baseline_acc * 100
+        print(f"   ✅ Frozen BERT shows {bert_improvement:+.1f}% improvement!")
         print("      Recommended for multi-dataset training with diverse column names.")
 
     if auto_acc > baseline_acc:
-        print(
-            f"   ✅ Auto-Expanding shows {((auto_acc - baseline_acc) / baseline_acc * 100):+.1f}% improvement!"
-        )
+        auto_improvement = (auto_acc - baseline_acc) / baseline_acc * 100
+        print(f"   ✅ Auto-Expanding shows {auto_improvement:+.1f}% improvement!")
         print("      Good lightweight alternative to BERT.")
 
     print("   💡 For production: Use Frozen BERT for best transferability")

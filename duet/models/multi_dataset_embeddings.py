@@ -3,11 +3,13 @@
 import json
 import os
 import pickle
+
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import torch
 import torch.nn as nn
+
 from transformers import AutoModel, AutoTokenizer
 
 from ..utils import get_project_root
@@ -27,10 +29,10 @@ class FrozenBERTColumnEmbedder(nn.Module):
         self,
         target_dim: int = 1,
         bert_model: str = "bert-base-uncased",
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
         tokenization_strategy: str = "split_underscore_camel",
         aggregation_strategy: str = "mean",
-        device: Optional[str] = None,
+        device: str | None = None,
     ):
         """Initialize frozen BERT column embedder.
 
@@ -78,8 +80,8 @@ class FrozenBERTColumnEmbedder(nn.Module):
         self.projection = nn.Linear(bert_dim, target_dim)
 
         # Registry for current dataset columns
-        self.current_columns: List[str] = []
-        self.current_embeddings: Optional[torch.Tensor] = None
+        self.current_columns: list[str] = []
+        self.current_embeddings: torch.Tensor | None = None
 
     def _load_cache(self):
         """Load cached embeddings and metadata."""
@@ -94,7 +96,7 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         if self.metadata_cache_file.exists():
             try:
-                with open(self.metadata_cache_file, "r") as f:
+                with open(self.metadata_cache_file) as f:
                     self.metadata = json.load(f)
             except Exception as e:
                 print(f"Warning: Could not load metadata cache: {e}")
@@ -209,7 +211,7 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
             return pooled.squeeze(0)  # [bert_dim]
 
-    def set_columns(self, column_names: List[str]) -> None:
+    def set_columns(self, column_names: list[str]) -> None:
         """Set column names for current dataset and precompute embeddings.
 
         Args:
@@ -303,7 +305,7 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         return column_embs
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """Get statistics about the embedding cache."""
         return {
             "cached_embeddings": len(self.embedding_cache),
@@ -316,7 +318,8 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
 
 class AutoExpandingEmbedder(nn.Module):
-    """Auto-expanding embedding layer that grows vocabulary as new columns are encountered."""
+    """Auto-expanding embedding layer that grows vocabulary as new columns are
+    encountered."""
 
     def __init__(
         self,
@@ -373,7 +376,7 @@ class AutoExpandingEmbedder(nn.Module):
         # Replace old embedding
         self.embedding = new_embedding
 
-    def set_columns(self, column_names: List[str]) -> None:
+    def set_columns(self, column_names: list[str]) -> None:
         """Set columns for current dataset, expanding vocabulary if needed."""
         self.current_columns = column_names
         self.current_indices = []
@@ -397,7 +400,8 @@ class AutoExpandingEmbedder(nn.Module):
         # Get indices for current columns
         self.current_indices = [self.column_to_idx[col] for col in column_names]
         print(
-            f"Set {len(column_names)} columns (vocabulary size: {self.embedding.num_embeddings})"
+            f"Set {len(column_names)} columns "
+            f"(vocabulary size: {self.embedding.num_embeddings})"
         )
 
     def get_embeddings(self) -> torch.Tensor:
@@ -426,7 +430,7 @@ class AutoExpandingEmbedder(nn.Module):
 
 def create_multi_dataset_embedder(
     strategy: str = "frozen_bert", target_dim: int = 1, **kwargs
-) -> Union[FrozenBERTColumnEmbedder, AutoExpandingEmbedder]:
+) -> FrozenBERTColumnEmbedder | AutoExpandingEmbedder:
     """Factory function for multi-dataset column embedders.
 
     Args:

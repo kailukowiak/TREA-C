@@ -1,4 +1,5 @@
-"""PatchDuET: Patch-based transformer with dual-patch NaN handling and optional column embeddings."""
+"""PatchDuET: Patch-based transformer with dual-patch NaN handling and optional column
+embeddings."""
 
 import pytorch_lightning as pl
 import torch
@@ -123,7 +124,8 @@ class PatchDuET(pl.LightningModule):
 
         Args:
             x_num: Numeric features [B, C_num, T]
-            x_cat: Categorical features [B, C_cat, T] (unused but kept for compatibility)
+            x_cat: Categorical features [B, C_cat, T] (unused but kept for
+                compatibility)
 
         Returns:
             Model output [B, num_classes] or [B, 1]
@@ -161,7 +163,7 @@ class PatchDuET(pl.LightningModule):
     def training_step(self, batch: dict, _batch_idx: int) -> torch.Tensor:
         """Training step."""
         x_num = batch["x_num"]
-        x_cat = batch.get("x_cat", None)
+        x_cat = batch.get("x_cat")
         labels = batch["y"]
 
         # Handle label format
@@ -178,7 +180,7 @@ class PatchDuET(pl.LightningModule):
     def validation_step(self, batch: dict, _batch_idx: int) -> torch.Tensor:
         """Validation step."""
         x_num = batch["x_num"]
-        x_cat = batch.get("x_cat", None)
+        x_cat = batch.get("x_cat")
         labels = batch["y"]
 
         # Handle label format
