@@ -8,14 +8,15 @@ with different column embedding strategies for transferability.
 
 import os
 import time
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.metrics import accuracy_score, f1_score
+
 
 # Set tokenizer parallelism to avoid warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -23,7 +24,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.etth1 import ETTh1Dataset
 from duet.models.multi_dataset_patch_duet import MultiDatasetPatchDuET
-from duet.utils import get_output_path, get_checkpoint_path
+from duet.utils import get_checkpoint_path, get_output_path
 
 
 def create_synthetic_dataset(
@@ -31,7 +32,7 @@ def create_synthetic_dataset(
     c_in: int = 5,
     seq_len: int = 96,
     num_classes: int = 3,
-    column_names: List[str] = None,
+    column_names: list[str] = None,
     nan_rate: float = 0.05,
 ):
     """Create a synthetic dataset with specified characteristics."""
@@ -354,7 +355,7 @@ def multi_dataset_experiment():
     print(summary)
 
     # Detailed results
-    print(f"\nDetailed Results:")
+    print("\nDetailed Results:")
     display_columns = [
         "Strategy",
         "Dataset",
@@ -379,7 +380,7 @@ def multi_dataset_experiment():
     bert_acc = df[df["Strategy"] == "Frozen BERT"]["Accuracy"].mean()
     auto_acc = df[df["Strategy"] == "Auto-Expanding"]["Accuracy"].mean()
 
-    print(f"Average Accuracy Across Datasets:")
+    print("Average Accuracy Across Datasets:")
     print(f"  Baseline (No Columns):  {baseline_acc:.4f}")
     print(
         f"  Frozen BERT:           {bert_acc:.4f} ({(bert_acc - baseline_acc) / baseline_acc * 100:+.1f}%)"
@@ -395,7 +396,7 @@ def multi_dataset_experiment():
     bert_params = df[df["Strategy"] == "Frozen BERT"]["Parameters"].iloc[0]
     auto_params = df[df["Strategy"] == "Auto-Expanding"]["Parameters"].iloc[0]
 
-    print(f"\nParameter Overhead:")
+    print("\nParameter Overhead:")
     print(f"  Baseline:       {baseline_params:,} params")
     print(
         f"  Frozen BERT:    {bert_params:,} params (+{bert_params - baseline_params:,})"
@@ -405,23 +406,21 @@ def multi_dataset_experiment():
     )
 
     # Recommendations
-    print(f"\n🎯 RECOMMENDATIONS:")
+    print("\n🎯 RECOMMENDATIONS:")
     if bert_acc > baseline_acc:
         print(
             f"   ✅ Frozen BERT shows {((bert_acc - baseline_acc) / baseline_acc * 100):+.1f}% improvement!"
         )
-        print(
-            f"      Recommended for multi-dataset training with diverse column names."
-        )
+        print("      Recommended for multi-dataset training with diverse column names.")
 
     if auto_acc > baseline_acc:
         print(
             f"   ✅ Auto-Expanding shows {((auto_acc - baseline_acc) / baseline_acc * 100):+.1f}% improvement!"
         )
-        print(f"      Good lightweight alternative to BERT.")
+        print("      Good lightweight alternative to BERT.")
 
-    print(f"   💡 For production: Use Frozen BERT for best transferability")
-    print(f"      Pre-computed embeddings minimize inference overhead.")
+    print("   💡 For production: Use Frozen BERT for best transferability")
+    print("      Pre-computed embeddings minimize inference overhead.")
 
 
 if __name__ == "__main__":
