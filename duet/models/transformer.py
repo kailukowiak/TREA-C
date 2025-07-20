@@ -142,9 +142,11 @@ class DualPatchTransformer(pl.LightningModule):
         if self.use_column_embeddings:
             # Get column embeddings [B, C_num, T]
             col_emb = self.column_embedder(B, T)  # [B, C_num, T]
-            
+
             # Stack value, mask, and column channels (triple-patch)
-            x_num_processed = torch.cat([x_val, m_nan, col_emb], dim=1)  # [B, 3·C_num, T]
+            x_num_processed = torch.cat(
+                [x_val, m_nan, col_emb], dim=1
+            )  # [B, 3·C_num, T]
         else:
             # Stack value & mask channels (dual-patch)
             x_num_processed = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]

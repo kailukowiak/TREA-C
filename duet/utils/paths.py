@@ -5,7 +5,7 @@ from pathlib import Path
 
 def get_project_root() -> Path:
     """Get the project root directory.
-    
+
     Returns:
         Path to the project root (where pyproject.toml is located)
     """
@@ -14,14 +14,14 @@ def get_project_root() -> Path:
     for parent in current.parents:
         if (parent / "pyproject.toml").exists():
             return parent
-    
+
     # Fallback: assume we're in duet/utils/ and go up 2 levels
     return Path(__file__).resolve().parent.parent.parent
 
 
 def get_outputs_dir() -> Path:
     """Get the outputs directory, creating it if it doesn't exist.
-    
+
     Returns:
         Path to datasets/outputs/ directory
     """
@@ -32,7 +32,7 @@ def get_outputs_dir() -> Path:
 
 def get_checkpoints_dir() -> Path:
     """Get the checkpoints directory, creating it if it doesn't exist.
-    
+
     Returns:
         Path to checkpoints/ directory
     """
@@ -43,30 +43,30 @@ def get_checkpoints_dir() -> Path:
 
 def get_output_path(filename: str, subdir: str = None) -> Path:
     """Get a path for output file in the datasets/outputs directory.
-    
+
     Args:
         filename: Name of the output file
         subdir: Optional subdirectory within outputs
-        
+
     Returns:
         Full path to the output file
     """
     outputs_dir = get_outputs_dir()
-    
+
     if subdir:
         outputs_dir = outputs_dir / subdir
         outputs_dir.mkdir(parents=True, exist_ok=True)
-    
+
     return outputs_dir / filename
 
 
 def get_checkpoint_path(model_name: str, filename: str = "best") -> Path:
     """Get a path for model checkpoint.
-    
+
     Args:
         model_name: Name of the model/experiment
         filename: Checkpoint filename (default: "best")
-        
+
     Returns:
         Full path to the checkpoint directory
     """

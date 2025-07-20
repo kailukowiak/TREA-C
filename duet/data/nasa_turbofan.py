@@ -1,6 +1,5 @@
 """NASA Turbofan Engine Degradation Dataset (C-MAPSS) loader."""
 
-
 from pathlib import Path
 
 import numpy as np

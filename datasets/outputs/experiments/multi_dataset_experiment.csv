@@ -1,0 +1,10 @@
+Model,Accuracy,F1 Score,Val Loss,Training Time (s),Parameters,Epochs,Embedding Stats,Dataset,Strategy
+Baseline_(No_Columns)_Temperature_Sensors,0.995,0.9949997215260373,0.05448472127318382,2.093139886856079,571459,6,{'strategy': 'none'},Temperature Sensors,Baseline (No Columns)
+Baseline_(No_Columns)_User_Metrics,0.99,0.99,0.033232130110263824,1.5747709274291992,573507,6,{'strategy': 'none'},User Metrics,Baseline (No Columns)
+Baseline_(No_Columns)_ETTh1,0.7974025974025974,0.7843391836518765,0.54503333568573,19.69281005859375,577603,5,{'strategy': 'none'},ETTh1,Baseline (No Columns)
+Frozen_BERT_Temperature_Sensors,1.0,1.0,0.0029306039214134216,1.7114245891571045,576324,6,"{'strategy': 'frozen_bert', 'cached_embeddings': 4, 'cache_size_mb': 0.012120246887207031, 'bert_model': 'bert-base-uncased', 'bert_dim': 768}",Temperature Sensors,Frozen BERT
+Frozen_BERT_User_Metrics,0.99,0.9900370328807092,0.052934952080249786,8.416596412658691,110061636,6,"{'strategy': 'frozen_bert', 'cached_embeddings': 9, 'cache_size_mb': 0.027169227600097656, 'bert_model': 'bert-base-uncased', 'bert_dim': 768}",User Metrics,Frozen BERT
+Frozen_BERT_ETTh1,0.8225108225108225,0.8142073384691471,0.4440135955810547,32.42628788948059,110067780,6,"{'strategy': 'frozen_bert', 'cached_embeddings': 16, 'cache_size_mb': 0.048168182373046875, 'bert_model': 'bert-base-uncased', 'bert_dim': 768}",ETTh1,Frozen BERT
+Auto-Expanding_Temperature_Sensors,0.995,0.9949997215260373,0.1098601371049881,1.7154009342193604,591572,6,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 4}",Temperature Sensors,Auto-Expanding
+Auto-Expanding_User_Metrics,0.99,0.99,0.04595264419913292,1.7103474140167236,594644,6,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 5}",User Metrics,Auto-Expanding
+Auto-Expanding_ETTh1,0.8747474747474747,0.8727008652404673,0.326762855052948,27.574501514434814,600788,6,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 7}",ETTh1,Auto-Expanding

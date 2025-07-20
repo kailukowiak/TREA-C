@@ -21,7 +21,7 @@ class ETTh1Dataset(Dataset):
     For classification, we convert the continuous OT (Oil Temperature) values
     into 3 classes based on quantiles: Low, Medium, High.
     """
-    
+
     # Column names for the ETTh1 dataset
     COLUMN_NAMES = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
 
@@ -159,7 +159,7 @@ class ETTh1Dataset(Dataset):
             "task": self.task,
             "column_names": self.COLUMN_NAMES.copy(),
         }
-    
+
     def get_column_names(self) -> list[str]:
         """Get column names for the dataset."""
         return self.COLUMN_NAMES.copy()

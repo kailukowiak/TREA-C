@@ -9,7 +9,7 @@ from .column_embeddings import create_column_embedding
 
 class PatchDuET(pl.LightningModule):
     """Patch-based DuET combining patching with dual-patch NaN handling.
-    
+
     This model combines the best aspects of:
     - PatchTST: Patching for temporal locality (proven 90%+ accuracy)
     - DuET: Dual-patch NaN handling (value + mask channels)
@@ -73,7 +73,7 @@ class PatchDuET(pl.LightningModule):
 
         # Input channels: 2×c_in (value+mask) or 3×c_in (value+mask+column)
         input_channels_per_feature = 3 if use_column_embeddings else 2
-        
+
         # Patch embedding
         self.patch_embedding = nn.Linear(
             patch_len * (input_channels_per_feature * c_in), d_model
@@ -98,10 +98,10 @@ class PatchDuET(pl.LightningModule):
 
     def create_patches(self, x):
         """Create patches from input tensor.
-        
+
         Args:
             x: Input tensor [B, C, T]
-            
+
         Returns:
             Patches tensor [B, num_patches, C * patch_len]
         """
@@ -116,7 +116,9 @@ class PatchDuET(pl.LightningModule):
         patches = torch.stack(patches, dim=1)  # [B, num_patches, C * patch_len]
         return patches
 
-    def forward(self, x_num: torch.Tensor, x_cat: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self, x_num: torch.Tensor, x_cat: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Forward pass.
 
         Args:
@@ -136,7 +138,7 @@ class PatchDuET(pl.LightningModule):
         if self.use_column_embeddings and self.column_embedder:
             # Get column embeddings [B, C_num, T]
             col_emb = self.column_embedder(B, T)
-            
+
             # Triple-patch: value + mask + column
             x_processed = torch.cat([x_val, m_nan, col_emb], dim=1)  # [B, 3×C_num, T]
         else:
@@ -145,7 +147,7 @@ class PatchDuET(pl.LightningModule):
 
         # 3. Create patches (winning architecture)
         patches = self.create_patches(x_processed)
-        
+
         # 4. Patch embedding + positional encoding
         x = self.patch_embedding(patches)
         x = x + self.pos_embedding
@@ -201,17 +203,17 @@ class PatchDuET(pl.LightningModule):
         seq_len: int,
         num_classes: int,
         task: str = "classification",
-        **kwargs
+        **kwargs,
     ):
         """Create baseline PatchDuET without column embeddings.
-        
+
         Args:
             c_in: Number of input channels
             seq_len: Sequence length
             num_classes: Number of classes
             task: 'classification' or 'regression'
             **kwargs: Additional model parameters
-            
+
         Returns:
             PatchDuET model without column embeddings
         """
@@ -221,7 +223,7 @@ class PatchDuET(pl.LightningModule):
             num_classes=num_classes,
             task=task,
             use_column_embeddings=False,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -233,10 +235,10 @@ class PatchDuET(pl.LightningModule):
         column_names: list[str],
         task: str = "classification",
         column_embedding_dim: int = 16,
-        **kwargs
+        **kwargs,
     ):
         """Create column-aware PatchDuET with semantic embeddings.
-        
+
         Args:
             c_in: Number of input channels
             seq_len: Sequence length
@@ -245,7 +247,7 @@ class PatchDuET(pl.LightningModule):
             task: 'classification' or 'regression'
             column_embedding_dim: Dimension for column embeddings
             **kwargs: Additional model parameters
-            
+
         Returns:
             PatchDuET model with column embeddings
         """
@@ -257,5 +259,5 @@ class PatchDuET(pl.LightningModule):
             task=task,
             use_column_embeddings=True,
             column_embedding_dim=column_embedding_dim,
-            **kwargs
+            **kwargs,
         )

@@ -53,7 +53,7 @@ class TimeSeriesDataModuleV2(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
         )
-    
+
     def get_column_names(self) -> list[str] | None:
         """Get column names from the train dataset if available."""
         if hasattr(self.train_dataset, "get_column_names"):
@@ -61,7 +61,7 @@ class TimeSeriesDataModuleV2(pl.LightningDataModule):
         elif hasattr(self.train_dataset, "COLUMN_NAMES"):
             return self.train_dataset.COLUMN_NAMES.copy()
         return None
-    
+
     def get_feature_info(self) -> dict | None:
         """Get feature information from the train dataset if available."""
         if hasattr(self.train_dataset, "get_feature_info"):
