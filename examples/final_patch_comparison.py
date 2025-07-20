@@ -21,6 +21,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.etth1 import ETTh1Dataset
 from duet.models.patch_duet import PatchDuET
+from duet.utils import get_output_path, get_checkpoint_path
 
 
 def inject_nans(dataset, nan_rate=0.05):
@@ -59,9 +60,10 @@ def inject_nans(dataset, nan_rate=0.05):
 def train_model(model, dm, model_name, max_epochs=10):
     """Train a model and return results."""
 
-    # Callbacks
+    # Callbacks - use centralized path management
+    checkpoint_dir = get_checkpoint_path(f"final_patch/{model_name}")
     checkpoint = ModelCheckpoint(
-        dirpath=f"checkpoints/final_patch/{model_name}",
+        dirpath=str(checkpoint_dir),
         filename="best",
         monitor="val_loss",
         mode="min",
@@ -140,7 +142,9 @@ def train_model(model, dm, model_name, max_epochs=10):
         "Training Time (s)": training_time,
         "Parameters": sum(p.numel() for p in model.parameters()),
         "Epochs": trainer.current_epoch + 1,
-        "Use Columns": "Yes" if hasattr(model, 'use_column_embeddings') and model.use_column_embeddings else "No",
+        "Use Columns": "Yes"
+        if hasattr(model, "use_column_embeddings") and model.use_column_embeddings
+        else "No",
     }
 
 
@@ -247,34 +251,47 @@ def main():
     print("=" * 80)
     print(df.to_string(index=False, float_format="%.6f"))
 
-    # Save results
-    df.to_csv("final_patchduet_comparison.csv", index=False)
-    print("\nResults saved to: final_patchduet_comparison.csv")
+    # Save results to proper output directory
+    output_path = get_output_path("final_patchduet_comparison.csv", "comparisons")
+    df.to_csv(output_path, index=False)
+    print(f"\nResults saved to: {output_path}")
 
     # Analysis
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    
+
     baseline_acc = df[df["Model"] == "PatchDuET-Baseline"]["Accuracy"].iloc[0]
     column_acc = df[df["Model"] == "PatchDuET-Columns"]["Accuracy"].iloc[0]
-    
+
     print(f"PatchDuET Baseline:          {baseline_acc:.4f} (patches + dual-patch NaN)")
-    print(f"PatchDuET Column-Aware:      {column_acc:.4f} (+ lightweight column embeddings)")
-    print(f"Performance trade-off:       {((column_acc - baseline_acc) / baseline_acc * 100):+.2f}%")
-    
+    print(
+        f"PatchDuET Column-Aware:      {column_acc:.4f} (+ lightweight column embeddings)"
+    )
+    print(
+        f"Performance trade-off:       {((column_acc - baseline_acc) / baseline_acc * 100):+.2f}%"
+    )
+
     baseline_params = df[df["Model"] == "PatchDuET-Baseline"]["Parameters"].iloc[0]
     column_params = df[df["Model"] == "PatchDuET-Columns"]["Parameters"].iloc[0]
-    param_overhead = ((column_params - baseline_params) / baseline_params * 100)
-    
-    print(f"\nParameter overhead:          +{param_overhead:.2f}% ({column_params - baseline_params:,} params)")
-    
+    param_overhead = (column_params - baseline_params) / baseline_params * 100
+
+    print(
+        f"\nParameter overhead:          +{param_overhead:.2f}% ({column_params - baseline_params:,} params)"
+    )
+
     print(f"\n🎯 CONCLUSION:")
-    print(f"   ✅ Baseline PatchDuET: {baseline_acc:.1%} accuracy, {baseline_params:,} params")
-    print(f"   ✅ Column-Aware PatchDuET: {column_acc:.1%} accuracy, {column_params:,} params")
+    print(
+        f"   ✅ Baseline PatchDuET: {baseline_acc:.1%} accuracy, {baseline_params:,} params"
+    )
+    print(
+        f"   ✅ Column-Aware PatchDuET: {column_acc:.1%} accuracy, {column_params:,} params"
+    )
     if abs(column_acc - baseline_acc) <= 0.05:  # Within 5%
         print(f"   🚀 READY FOR MULTI-DATASET TRAINING!")
-        print(f"      Small performance trade-off acceptable for transferability gains.")
+        print(
+            f"      Small performance trade-off acceptable for transferability gains."
+        )
     else:
         print(f"   ⚠️  Consider tuning column embedding integration.")
 
