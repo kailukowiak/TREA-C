@@ -38,7 +38,7 @@ class FinancialMarketDataset(Dataset):
 
     def __init__(
         self,
-        data_dir: str = "./datasets/real_world/financial_market",
+        data_dir: str = "./data/datasets/real_world/financial_market",
         split: str = "train",
         seq_len: int = 60,  # 60 time steps (e.g., minutes/hours)
         task: str = "classification",

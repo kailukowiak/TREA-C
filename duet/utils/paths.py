@@ -23,7 +23,7 @@ def get_outputs_dir() -> Path:
     """Get the outputs directory, creating it if it doesn't exist.
 
     Returns:
-        Path to datasets/outputs/ directory
+        Path to data/datasets/outputs/ directory
     """
     outputs_dir = get_project_root() / "datasets" / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -42,7 +42,7 @@ def get_checkpoints_dir() -> Path:
 
 
 def get_output_path(filename: str, subdir: str = None) -> Path:
-    """Get a path for output file in the datasets/outputs directory.
+    """Get a path for output file in the data/datasets/outputs directory.
 
     Args:
         filename: Name of the output file

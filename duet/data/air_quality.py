@@ -36,7 +36,7 @@ class AirQualityDataset(Dataset):
 
     def __init__(
         self,
-        data_dir: str = "./datasets/real_world/air_quality",
+        data_dir: str = "./data/datasets/real_world/air_quality",
         split: str = "train",
         seq_len: int = 96,
         task: str = "classification",

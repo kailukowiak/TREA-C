@@ -33,7 +33,7 @@ class HumanActivityDataset(Dataset):
 
     def __init__(
         self,
-        data_dir: str = "./datasets/real_world/human_activity",
+        data_dir: str = "./data/datasets/real_world/human_activity",
         split: str = "train",
         seq_len: int = 128,
         task: str = "classification",
