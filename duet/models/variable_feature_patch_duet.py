@@ -35,6 +35,9 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         # Feature handling
         feature_padding_value: float = 0.0,
         use_feature_masks: bool = True,
+        # Categorical embedding args
+        categorical_cardinalities: list[int] | None = None,
+        categorical_embedding_dim: int = 16,
         # Multi-dataset embedding args
         bert_model: str = "bert-base-uncased",
         column_embedding_dim: int = 16,
@@ -58,6 +61,8 @@ class VariableFeaturePatchDuET(pl.LightningModule):
             task: 'classification' or 'regression'
             feature_padding_value: Value to use for missing features
             use_feature_masks: Whether to use explicit feature presence masks
+            categorical_cardinalities: List of cardinality for each categorical feature
+            categorical_embedding_dim: Embedding dimension for categorical features
             max_sequence_length: Maximum sequence length for positional encoding
             **embedder_kwargs: Additional embedder arguments
         """
@@ -70,6 +75,7 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         self.max_categorical_features = max_categorical_features
         self.feature_padding_value = feature_padding_value
         self.use_feature_masks = use_feature_masks
+        self.categorical_embedding_dim = categorical_embedding_dim
 
         # Patching parameters
         self.patch_len = patch_len
@@ -83,6 +89,26 @@ class VariableFeaturePatchDuET(pl.LightningModule):
             "column_names": [],
             "feature_mapping": None,
         }
+
+        # Categorical embeddings
+        self.categorical_embeddings = None
+        if max_categorical_features > 0:
+            if categorical_cardinalities is None:
+                # Default cardinality of 100 for each categorical feature
+                categorical_cardinalities = [100] * max_categorical_features
+            elif len(categorical_cardinalities) != max_categorical_features:
+                raise ValueError(
+                    f"categorical_cardinalities length "
+                    f"({len(categorical_cardinalities)}) must match "
+                    f"max_categorical_features ({max_categorical_features})"
+                )
+
+            self.categorical_embeddings = nn.ModuleList(
+                [
+                    nn.Embedding(cardinality, categorical_embedding_dim)
+                    for cardinality in categorical_cardinalities
+                ]
+            )
 
         # Column embeddings (for the maximum feature space)
         self.use_column_embeddings = column_embedding_strategy != "none"
@@ -105,22 +131,29 @@ class VariableFeaturePatchDuET(pl.LightningModule):
                 strategy=column_embedding_strategy, **embedder_args
             )
 
-        # Total features in unified space
-        total_features = max_numeric_features + max_categorical_features
-
-        # Input channels: [value, nan_mask, feature_mask?, column_emb?]
-        base_channels = 2  # value + nan_mask
+        # Calculate input channels for unified space
+        # Numeric features: [value, nan_mask, feature_mask?, column_emb?]
+        numeric_channels = 2  # value + nan_mask
         if use_feature_masks:
-            base_channels += 1  # + feature_mask
+            numeric_channels += 1  # + feature_mask
         if self.use_column_embeddings:
-            base_channels += 1  # + column_emb
+            numeric_channels += 1  # + column_emb
 
-        input_channels_per_feature = base_channels
+        # Categorical features: [embedding_dims, feature_mask?, column_emb?]
+        categorical_channels = categorical_embedding_dim  # embedded values
+        if use_feature_masks:
+            categorical_channels += 1  # + feature_mask
+        if self.use_column_embeddings:
+            categorical_channels += 1  # + column_emb
+
+        # Total input channels (mixed numeric and categorical)
+        total_input_channels = (
+            max_numeric_features * numeric_channels
+            + max_categorical_features * categorical_channels
+        )
 
         # Patch embedding
-        self.patch_embedding = nn.Linear(
-            patch_len * (input_channels_per_feature * total_features), d_model
-        )
+        self.patch_embedding = nn.Linear(patch_len * total_input_channels, d_model)
 
         # Dynamic positional encoding
         max_patches = (max_sequence_length - patch_len) // stride + 1
@@ -230,32 +263,34 @@ class VariableFeaturePatchDuET(pl.LightningModule):
 
     def pad_features_to_unified_space(
         self, x_num: torch.Tensor, x_cat: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Pad input features to unified feature space.
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Pad features to unified space with proper categorical embeddings.
 
         Args:
             x_num: Numeric features [B, C_num, T]
             x_cat: Categorical features [B, C_cat, T] (optional)
 
         Returns:
-            Tuple of (padded_features, feature_mask)
-            - padded_features: [B, max_total_features, T]
-            - feature_mask: [B, max_total_features, T] (1=real feature, 0=padding)
+            Tuple of (x_num_padded, x_cat_embedded, feature_mask)
+            - x_num_padded: [B, max_numeric_features, T] (with padding)
+            - x_cat_embedded: [B, max_categorical_features,
+                               categorical_embedding_dim, T] (embedded)
+            - feature_mask: [B, max_numeric_features +
+                             max_categorical_features, T] (1=real, 0=pad)
         """
         B, _, T = x_num.shape
         mapping = self.current_dataset_info["feature_mapping"]
 
-        total_max_features = self.max_numeric_features + self.max_categorical_features
-
-        # Create unified feature tensor
-        padded_features = torch.full(
-            (B, total_max_features, T),
+        # Pad numeric features
+        x_num_padded = torch.full(
+            (B, self.max_numeric_features, T),
             self.feature_padding_value,
             dtype=x_num.dtype,
             device=x_num.device,
         )
 
-        # Create feature mask
+        # Create feature mask for both numeric and categorical
+        total_max_features = self.max_numeric_features + self.max_categorical_features
         feature_mask = torch.zeros(
             (B, total_max_features, T), dtype=torch.float, device=x_num.device
         )
@@ -263,23 +298,38 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         # Place numeric features
         num_numeric = mapping["numeric_end"] - mapping["numeric_start"]
         if num_numeric > 0:
-            padded_features[:, mapping["numeric_start"] : mapping["numeric_end"], :] = (
-                x_num
-            )
-            feature_mask[:, mapping["numeric_start"] : mapping["numeric_end"], :] = 1.0
+            x_num_padded[:, :num_numeric, :] = x_num
+            feature_mask[:, :num_numeric, :] = 1.0
 
-        # Place categorical features
-        if x_cat is not None:
+        # Handle categorical features with embeddings
+        x_cat_embedded = torch.zeros(
+            (B, self.max_categorical_features, self.categorical_embedding_dim, T),
+            dtype=torch.float,
+            device=x_num.device,
+        )
+
+        if x_cat is not None and self.categorical_embeddings is not None:
             num_categorical = mapping["categorical_end"] - mapping["categorical_start"]
             if num_categorical > 0:
-                padded_features[
-                    :, mapping["categorical_start"] : mapping["categorical_end"], :
-                ] = x_cat
+                for i in range(num_categorical):
+                    # Embed each categorical feature separately
+                    cat_indices = x_cat[:, i, :].long()  # [B, T]
+                    embedded = self.categorical_embeddings[i](
+                        cat_indices
+                    )  # [B, T, embedding_dim]
+                    x_cat_embedded[:, i, :, :] = embedded.permute(
+                        0, 2, 1
+                    )  # [B, embedding_dim, T]
+
+                # Mark categorical features as present in feature mask
                 feature_mask[
-                    :, mapping["categorical_start"] : mapping["categorical_end"], :
+                    :,
+                    self.max_numeric_features : self.max_numeric_features
+                    + num_categorical,
+                    :,
                 ] = 1.0
 
-        return padded_features, feature_mask
+        return x_num_padded, x_cat_embedded, feature_mask
 
     def create_patches(self, x):
         """Create patches from input tensor with dynamic sequence length."""
@@ -326,49 +376,84 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         """
         B, _, T = x_num.shape
 
-        # 1. Pad features to unified space
-        x_padded, feature_mask = self.pad_features_to_unified_space(x_num, x_cat)
-        # x_padded: [B, max_total_features, T]
-        # feature_mask: [B, max_total_features, T]
+        # 1. Pad features to unified space with categorical embeddings
+        x_num_padded, x_cat_embedded, feature_mask = self.pad_features_to_unified_space(
+            x_num, x_cat
+        )
+        # x_num_padded: [B, max_numeric_features, T]
+        # x_cat_embedded: [B, max_categorical_features, categorical_embedding_dim, T]
+        # feature_mask: [B, max_numeric_features + max_categorical_features, T]
 
-        # 2. Dual-patch NaN handling (on padded space)
-        m_nan = torch.isnan(x_padded).float()  # [B, max_total_features, T]
-        x_val = torch.nan_to_num(x_padded, nan=0.0)  # [B, max_total_features, T]
+        # 2. Handle numeric features with dual-patch NaN handling
+        m_nan = torch.isnan(x_num_padded).float()  # [B, max_numeric_features, T]
+        x_num_val = torch.nan_to_num(
+            x_num_padded, nan=0.0
+        )  # [B, max_numeric_features, T]
 
-        # 3. Combine channels
-        channels_to_cat = [x_val, m_nan]
+        # 3. Prepare channels for concatenation
+        channels_to_cat = []
+
+        # Add numeric channels: [value, nan_mask, feature_mask?, column_emb?]
+        channels_to_cat.append(x_num_val)  # [B, max_numeric_features, T]
+        channels_to_cat.append(m_nan)  # [B, max_numeric_features, T]
 
         if self.use_feature_masks:
-            channels_to_cat.append(feature_mask)
+            numeric_feature_mask = feature_mask[
+                :, : self.max_numeric_features, :
+            ]  # [B, max_numeric_features, T]
+            channels_to_cat.append(numeric_feature_mask)
 
         if self.use_column_embeddings and self.column_embedder is not None:
             col_emb = self.column_embedder(B, T)  # [B, max_total_features, T]
-            channels_to_cat.append(col_emb)
+            numeric_col_emb = col_emb[
+                :, : self.max_numeric_features, :
+            ]  # [B, max_numeric_features, T]
+            channels_to_cat.append(numeric_col_emb)
 
-        x_processed = torch.cat(
-            channels_to_cat, dim=1
-        )  # [B, channels * max_total_features, T]
+        # 4. Add categorical channels: [embedding_dims, feature_mask?, column_emb?]
+        # Reshape categorical embeddings from
+        # [B, max_categorical_features, embedding_dim, T] to
+        # [B, max_categorical_features * embedding_dim, T]
+        x_cat_reshaped = x_cat_embedded.view(
+            B, self.max_categorical_features * self.categorical_embedding_dim, T
+        )
+        channels_to_cat.append(x_cat_reshaped)
 
-        # 4. Create patches
+        if self.use_feature_masks:
+            categorical_feature_mask = feature_mask[
+                :, self.max_numeric_features :, :
+            ]  # [B, max_categorical_features, T]
+            channels_to_cat.append(categorical_feature_mask)
+
+        if self.use_column_embeddings and self.column_embedder is not None:
+            categorical_col_emb = col_emb[
+                :, self.max_numeric_features :, :
+            ]  # [B, max_categorical_features, T]
+            channels_to_cat.append(categorical_col_emb)
+
+        # 5. Concatenate all channels
+        x_processed = torch.cat(channels_to_cat, dim=1)  # [B, total_input_channels, T]
+
+        # 6. Create patches
         patches = self.create_patches(x_processed)
         num_patches = patches.shape[1]
 
-        # 5. Patch embedding
+        # 7. Patch embedding
         patch_embeddings = self.patch_embedding(patches)  # [B, num_patches, d_model]
 
-        # 6. Add positional encoding
+        # 8. Add positional encoding
         pos_enc = self.get_positional_encoding(num_patches)
         patch_embeddings = patch_embeddings + pos_enc
 
-        # 7. Transformer
+        # 9. Transformer
         transformer_out = self.transformer(
             patch_embeddings
         )  # [B, num_patches, d_model]
 
-        # 8. Global average pooling
+        # 10. Global average pooling
         pooled = transformer_out.mean(dim=1)  # [B, d_model]
 
-        # 9. Classification/regression head
+        # 11. Classification/regression head
         output = self.head(pooled)
 
         return output
@@ -434,6 +519,7 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         dataset_schemas: dict[str, dict[str, Any]],
         num_classes: int,
         strategy: str = "auto_expanding",
+        categorical_cardinalities: list[int] | None = None,
         **kwargs,
     ) -> "VariableFeaturePatchDuET":
         """Factory method for multi-dataset training.
@@ -448,6 +534,7 @@ class VariableFeaturePatchDuET(pl.LightningModule):
                 }
             num_classes: Number of output classes
             strategy: Column embedding strategy
+            categorical_cardinalities: List of cardinality for each categorical feature
             **kwargs: Additional model arguments
 
         Returns:
@@ -475,6 +562,7 @@ class VariableFeaturePatchDuET(pl.LightningModule):
             max_categorical_features=max_categorical,
             num_classes=num_classes,
             column_embedding_strategy=strategy,
+            categorical_cardinalities=categorical_cardinalities,
             **kwargs,
         )
 
@@ -486,6 +574,7 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         max_numeric_features: int,
         max_categorical_features: int,
         num_classes: int,
+        categorical_cardinalities: list[int] | None = None,
         **kwargs,
     ) -> "VariableFeaturePatchDuET":
         """Create baseline model without column embeddings."""
@@ -494,6 +583,7 @@ class VariableFeaturePatchDuET(pl.LightningModule):
             max_categorical_features=max_categorical_features,
             num_classes=num_classes,
             column_embedding_strategy="none",
+            categorical_cardinalities=categorical_cardinalities,
             **kwargs,
         )
 
@@ -547,8 +637,17 @@ if __name__ == "__main__":
     }
 
     # Create model for all datasets
+    # Define categorical cardinalities (max across all datasets)
+    categorical_cardinalities = [
+        10,
+        5,
+    ]  # 10 categories for first categorical, 5 for second
+
     model = VariableFeaturePatchDuET.create_for_multi_dataset(
-        dataset_schemas=dataset_schemas, num_classes=3, strategy="auto_expanding"
+        dataset_schemas=dataset_schemas,
+        num_classes=3,
+        strategy="auto_expanding",
+        categorical_cardinalities=categorical_cardinalities,
     )
 
     print(f"\nModel parameters: {sum(p.numel() for p in model.parameters()):,}")
