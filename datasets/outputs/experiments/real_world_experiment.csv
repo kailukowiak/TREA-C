@@ -1,5 +1,0 @@
-Model,Accuracy,F1 Score,Val Loss,Training Time (s),Parameters,Epochs,Dataset,Description,Numeric Features,Categorical Features,Total Features,Classes,Sequence Length
-ETTh1,0.913997113997114,0.9119348977375966,0.22982260584831238,57.866281509399414,666775,10,ETTh1,Electricity Transformer Temperature,7,0,7,3,96
-Human_Activity,0.8555555555555555,0.8495370370370371,0.23473262786865234,9.134696245193481,666775,8,Human_Activity,Human Activity Recognition,6,0,6,6,128
-Air_Quality,1.0,1.0,4.113577233511023e-05,3.792055130004883,666775,8,Air_Quality,Air Quality Monitoring,10,0,10,3,96
-Financial_Market,0.38333333333333336,0.3063157772940128,2968.947265625,8.025300741195679,666775,11,Financial_Market,Financial Market Analysis,12,0,12,3,60
