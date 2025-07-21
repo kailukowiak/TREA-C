@@ -176,7 +176,7 @@ class PatchTSTClassifier(pl.LightningModule):
 
         # Transformer
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, n_head=n_head, batch_first=True, norm_first=True
+            d_model=d_model, nhead=n_head, batch_first=True, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
@@ -285,7 +285,7 @@ class PatchTSTNan(pl.LightningModule):
 
         # Transformer
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, n_head=n_head, batch_first=True, norm_first=True
+            d_model=d_model, nhead=n_head, batch_first=True, norm_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
