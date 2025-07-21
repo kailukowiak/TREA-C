@@ -441,9 +441,9 @@ class VariableFeaturePatchDuET(pl.LightningModule):
         Args:
             dataset_schemas: Dict mapping dataset names to schema info
                 Example: {
-                    "dataset1": {"numeric": 10, "categorical": 3, 
+                    "dataset1": {"numeric": 10, "categorical": 3,
                                  "columns": ["a", "b", ...]},
-                    "dataset2": {"numeric": 16, "categorical": 1, 
+                    "dataset2": {"numeric": 16, "categorical": 1,
                                  "columns": ["x", "y", ...]}
                 }
             num_classes: Number of output classes

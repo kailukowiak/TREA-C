@@ -174,22 +174,22 @@ class NASATurbofanDataset(Dataset):
     def get_column_names(self):
         """Get column names for the dataset."""
         return self.sensor_names
-    
+
     @property
     def num_classes(self):
         """Number of classes for classification."""
-        return getattr(self, '_num_classes', 3)
-    
+        return getattr(self, "_num_classes", 3)
+
     @property
     def numeric_features(self):
         """Number of numeric features."""
         return 21
-    
+
     @property
     def categorical_features(self):
         """Number of categorical features."""
         return 0
-    
+
     def get_feature_info(self):
         """Get information about features."""
         return {

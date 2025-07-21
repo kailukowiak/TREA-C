@@ -17,4 +17,4 @@ data/
 duet/data/*
 !duet/data/*.py
 checkpoints/
-datasets/
+datasets/.env
