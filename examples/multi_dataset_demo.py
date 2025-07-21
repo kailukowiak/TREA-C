@@ -365,8 +365,83 @@ def train_model(model, dm, model_name, max_epochs=10):
     }
 
 
+def train_baseline_without_pretraining(final_dataset_name, final_dataset_info):
+    """Train baseline model directly on final dataset without pretraining."""
+
+    print(f"\n{'=' * 60}")
+    print(f"TRAINING BASELINE WITHOUT PRETRAINING: {final_dataset_name}")
+    print(f"{'=' * 60}")
+
+    # Handle ETTh1 differently (real dataset)
+    if final_dataset_name == "ETTh1":
+        train_dataset = final_dataset_info["train"]
+        val_dataset = final_dataset_info["val"]
+        column_names = final_dataset_info["column_names"]
+        c_in = final_dataset_info["c_in"]
+        seq_len = final_dataset_info["seq_len"]
+        num_classes = final_dataset_info["num_classes"]
+
+        # Inject NaNs into ETTh1
+        train_nan_mask = torch.rand_like(train_dataset.x_num) < 0.05
+        val_nan_mask = torch.rand_like(val_dataset.x_num) < 0.05
+        train_dataset.x_num[train_nan_mask] = float("nan")
+        val_dataset.x_num[val_nan_mask] = float("nan")
+
+    else:
+        # Synthetic datasets
+        train_data = final_dataset_info.copy()
+        val_data = create_synthetic_dataset(
+            num_samples=200,  # Smaller validation set
+            c_in=train_data["c_in"],
+            seq_len=train_data["seq_len"],
+            num_classes=train_data["num_classes"],
+            column_names=train_data["column_names"],
+            nan_rate=0.05,
+        )
+
+        train_dataset = SyntheticDataset(train_data)
+        val_dataset = SyntheticDataset(val_data)
+        column_names = train_data["column_names"]
+        c_in = train_data["c_in"]
+        seq_len = train_data["seq_len"]
+        num_classes = train_data["num_classes"]
+
+    # Create data module
+    dm = TimeSeriesDataModuleV2(
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        batch_size=32,
+        num_workers=4,
+    )
+
+    # Create baseline model (no column embeddings)
+    model = MultiDatasetPatchDuET.create_baseline(
+        c_in=c_in,
+        seq_len=seq_len,
+        num_classes=num_classes,
+        d_model=64,  # Smaller for faster training
+        n_head=4,
+        num_layers=2,
+        lr=1e-3,
+    )
+
+    print(f"  Columns: {column_names}")
+    print(f"  Model params: {sum(p.numel() for p in model.parameters()):,}")
+
+    # Train model
+    model_name = f"NoPretraining_{final_dataset_name}".replace(" ", "_")
+    result = train_model(
+        model, dm, model_name, max_epochs=10
+    )  # More epochs for fair comparison
+    result["Dataset"] = final_dataset_name
+    result["Strategy"] = "No Pretraining"
+
+    print(f"  Accuracy: {result['Accuracy']:.4f}")
+    return result
+
+
 def multi_dataset_experiment():
-    """Run multi-dataset training experiment."""
+    """Run multi-dataset training experiment with pretraining comparison."""
 
     torch.manual_seed(42)
     np.random.seed(42)
@@ -413,6 +488,14 @@ def multi_dataset_experiment():
     }
 
     results = []
+
+    # First, add baseline without pretraining for final dataset (ETTh1)
+    final_dataset_name = "ETTh1"
+    if final_dataset_name in datasets:
+        baseline_result = train_baseline_without_pretraining(
+            final_dataset_name, datasets[final_dataset_name]
+        )
+        results.append(baseline_result)
 
     for strategy_name, strategy in strategies.items():
         print(f"\n{'=' * 60}")
@@ -463,7 +546,7 @@ def multi_dataset_experiment():
                 train_dataset=train_dataset,
                 val_dataset=val_dataset,
                 batch_size=32,
-                num_workers=0,  # Avoid multiprocessing issues
+                num_workers=4,
             )
 
             # Create model
@@ -550,19 +633,38 @@ def multi_dataset_experiment():
     print("ANALYSIS")
     print("=" * 60)
 
+    # Get accuracy values for different strategies
+    no_pretraining_acc = df[df["Strategy"] == "No Pretraining"]["Accuracy"].mean()
     baseline_acc = df[df["Strategy"] == "Baseline (No Columns)"]["Accuracy"].mean()
     bert_acc = df[df["Strategy"] == "Frozen BERT"]["Accuracy"].mean()
     auto_acc = df[df["Strategy"] == "Auto-Expanding"]["Accuracy"].mean()
 
+    # Calculate improvements vs no pretraining
+    baseline_vs_no_pretrain = (
+        (baseline_acc - no_pretraining_acc) / no_pretraining_acc * 100
+    )
+    bert_vs_no_pretrain = (bert_acc - no_pretraining_acc) / no_pretraining_acc * 100
+    auto_vs_no_pretrain = (auto_acc - no_pretraining_acc) / no_pretraining_acc * 100
+
+    # Calculate improvements vs baseline
     bert_improvement = (bert_acc - baseline_acc) / baseline_acc * 100
     auto_improvement = (auto_acc - baseline_acc) / baseline_acc * 100
 
     print("Average Accuracy Across Datasets:")
-    print(f"  Baseline (No Columns):  {baseline_acc:.4f}")
-    print(f"  Frozen BERT:           {bert_acc:.4f} ({bert_improvement:+.1f}%)")
-    print(f"  Auto-Expanding:        {auto_acc:.4f} ({auto_improvement:+.1f}%)")
+    print(f"  No Pretraining:        {no_pretraining_acc:.4f}")
+    baseline_str = f"  Baseline (No Columns):  {baseline_acc:.4f}"
+    print(f"{baseline_str} ({baseline_vs_no_pretrain:+.1f}%)")
+    print(f"  Frozen BERT:           {bert_acc:.4f} ({bert_vs_no_pretrain:+.1f}%)")
+    print(f"  Auto-Expanding:        {auto_acc:.4f} ({auto_vs_no_pretrain:+.1f}%)")
+
+    print("\nPretraining Benefits vs No Pretraining:")
+    print("  Multi-dataset pretraining improves performance by:")
+    print(f"    Baseline: {baseline_vs_no_pretrain:+.1f}%")
+    print(f"    BERT:     {bert_vs_no_pretrain:+.1f}%")
+    print(f"    Auto:     {auto_vs_no_pretrain:+.1f}%")
 
     # Parameter overhead
+    no_pretrain_params = df[df["Strategy"] == "No Pretraining"]["Parameters"].iloc[0]
     baseline_params = df[df["Strategy"] == "Baseline (No Columns)"]["Parameters"].iloc[
         0
     ]
@@ -570,26 +672,40 @@ def multi_dataset_experiment():
     auto_params = df[df["Strategy"] == "Auto-Expanding"]["Parameters"].iloc[0]
 
     print("\nParameter Overhead:")
+    print(f"  No Pretraining: {no_pretrain_params:,} params")
     print(f"  Baseline:       {baseline_params:,} params")
-    print(
-        f"  Frozen BERT:    {bert_params:,} params (+{bert_params - baseline_params:,})"
-    )
-    print(
-        f"  Auto-Expanding: {auto_params:,} params (+{auto_params - baseline_params:,})"
-    )
+    bert_overhead = bert_params - baseline_params
+    auto_overhead = auto_params - baseline_params
+    print(f"  Frozen BERT:    {bert_params:,} params (+{bert_overhead:,})")
+    print(f"  Auto-Expanding: {auto_params:,} params (+{auto_overhead:,})")
 
     # Recommendations
     print("\n🎯 RECOMMENDATIONS:")
+
+    print("\n📊 PRETRAINING EFFECTIVENESS:")
+    if baseline_vs_no_pretrain > 0:
+        print("   ✅ Multi-dataset pretraining shows clear benefits!")
+        benefit_str = "      Even basic pretraining improves by"
+        print(f"{benefit_str} {baseline_vs_no_pretrain:+.1f}%")
+    else:
+        change_str = "   ⚠️  Basic pretraining shows"
+        print(f"{change_str} {baseline_vs_no_pretrain:+.1f}% change")
+        print("      Consider more sophisticated pretraining strategies")
+
     if bert_acc > baseline_acc:
-        bert_improvement = (bert_acc - baseline_acc) / baseline_acc * 100
-        print(f"   ✅ Frozen BERT shows {bert_improvement:+.1f}% improvement!")
+        bert_str = f"   ✅ Frozen BERT shows {bert_improvement:+.1f}%"
+        print(f"{bert_str} improvement over baseline!")
         print("      Recommended for multi-dataset training with diverse column names.")
 
     if auto_acc > baseline_acc:
-        auto_improvement = (auto_acc - baseline_acc) / baseline_acc * 100
-        print(f"   ✅ Auto-Expanding shows {auto_improvement:+.1f}% improvement!")
+        auto_str = f"   ✅ Auto-Expanding shows {auto_improvement:+.1f}%"
+        print(f"{auto_str} improvement over baseline!")
         print("      Good lightweight alternative to BERT.")
 
+    print("\n💡 BEST STRATEGY:")
+    best_strategy = df.loc[df["Accuracy"].idxmax(), "Strategy"]
+    best_accuracy = df["Accuracy"].max()
+    print(f"   🏆 {best_strategy}: {best_accuracy:.4f} accuracy")
     print("   💡 For production: Use Frozen BERT for best transferability")
     print("      Pre-computed embeddings minimize inference overhead.")
 
@@ -688,7 +804,7 @@ def variable_feature_experiment():
             train_dataset=train_dataset,
             val_dataset=val_dataset,
             batch_size=32,
-            num_workers=0,
+            num_workers=4,
         )
 
         print(f"  Numeric features: {config['numeric']}")
@@ -813,6 +929,58 @@ def real_world_experiment():
             dataset, [train_size, val_size]
         )
 
+        print(f"  Dataset info: {info}")
+        print(f"  Columns: {columns}")
+        print(f"  Train samples: {len(train_dataset)}")
+        print(f"  Val samples: {len(val_dataset)}")
+
+        # First, train baseline without pretraining (from scratch)
+        print("\n  Training baseline from scratch...")
+        baseline_model = VariableFeaturePatchDuET(
+            max_numeric_features=info["n_numeric"],
+            max_categorical_features=info["n_categorical"],
+            num_classes=info["num_classes"],
+            categorical_cardinalities=[10] * info["n_categorical"]
+            if info["n_categorical"] > 0
+            else None,
+            patch_len=16,
+            stride=8,
+            d_model=128,
+            n_head=8,
+            num_layers=3,
+            lr=1e-3,
+            column_embedding_strategy="auto_expanding",
+        )
+
+        baseline_model.set_dataset_schema(
+            numeric_features=info["n_numeric"],
+            categorical_features=info["n_categorical"],
+            column_names=columns,
+        )
+
+        # Create data module for baseline
+        baseline_dm = TimeSeriesDataModuleV2(
+            train_dataset=train_dataset,
+            val_dataset=val_dataset,
+            batch_size=32,
+            num_workers=4,
+        )
+
+        baseline_result = train_model(
+            baseline_model,
+            baseline_dm,
+            f"RealWorld_Baseline_{dataset_name}",
+            max_epochs=10,
+        )
+        baseline_result["Dataset"] = dataset_name
+        baseline_result["Strategy"] = "No Pretraining"
+        baseline_result["Dataset Type"] = "Real-World"
+        baseline_result.update(info)
+        results.append(baseline_result)
+        print(f"    Baseline Accuracy: {baseline_result['Accuracy']:.4f}")
+
+        # Then train with multi-dataset pretraining
+        print("  Training with multi-dataset pretraining...")
         # Set schema for this dataset
         model.set_dataset_schema(
             numeric_features=info["n_numeric"],
@@ -825,22 +993,28 @@ def real_world_experiment():
             train_dataset=train_dataset,
             val_dataset=val_dataset,
             batch_size=32,
-            num_workers=0,
+            num_workers=4,
         )
 
-        print(f"  Dataset info: {info}")
-        print(f"  Columns: {columns}")
-        print(f"  Train samples: {len(train_dataset)}")
-        print(f"  Val samples: {len(val_dataset)}")
-
         # Train model
-        result = train_model(model, dm, f"RealWorld_{dataset_name}", max_epochs=10)
+        result = train_model(
+            model, dm, f"RealWorld_Pretrained_{dataset_name}", max_epochs=10
+        )
         result["Dataset"] = dataset_name
+        result["Strategy"] = "Multi-Dataset Pretraining"
         result["Dataset Type"] = "Real-World"
         result.update(info)
 
         results.append(result)
-        print(f"  Accuracy: {result['Accuracy']:.4f}")
+        print(f"    Pretrained Accuracy: {result['Accuracy']:.4f}")
+
+        # Calculate improvement
+        improvement = (
+            (result["Accuracy"] - baseline_result["Accuracy"])
+            / baseline_result["Accuracy"]
+            * 100
+        )
+        print(f"    Improvement: {improvement:+.1f}%")
 
     if results:
         # Create results DataFrame
@@ -853,12 +1027,14 @@ def real_world_experiment():
 
         display_columns = [
             "Dataset",
+            "Strategy",
             "n_numeric",
             "n_categorical",
             "sequence_length",
             "num_classes",
             "Accuracy",
             "F1 Score",
+            "Training Time (s)",
         ]
         print(df[display_columns].to_string(index=False, float_format="%.4f"))
 
@@ -867,10 +1043,59 @@ def real_world_experiment():
         df.to_csv(output_path, index=False)
         print(f"\nResults saved to: {output_path}")
 
+        # Analysis of pretraining benefits
+        print("\n" + "=" * 60)
+        print("REAL-WORLD PRETRAINING ANALYSIS")
+        print("=" * 60)
+
+        # Group by dataset and calculate improvements
+        for dataset_name in df["Dataset"].unique():
+            dataset_results = df[df["Dataset"] == dataset_name]
+
+            if len(dataset_results) == 2:  # Should have both baseline and pretrained
+                baseline_acc = dataset_results[
+                    dataset_results["Strategy"] == "No Pretraining"
+                ]["Accuracy"].iloc[0]
+                pretrained_acc = dataset_results[
+                    dataset_results["Strategy"] == "Multi-Dataset Pretraining"
+                ]["Accuracy"].iloc[0]
+
+                improvement = (pretrained_acc - baseline_acc) / baseline_acc * 100
+
+                print(f"\n{dataset_name}:")
+                print(f"  No Pretraining:      {baseline_acc:.4f}")
+                print(f"  Multi-Dataset Pretrain: {pretrained_acc:.4f}")
+                print(f"  Improvement:         {improvement:+.1f}%")
+
+        # Overall statistics
+        baseline_results = df[df["Strategy"] == "No Pretraining"]
+        pretrained_results = df[df["Strategy"] == "Multi-Dataset Pretraining"]
+
+        if len(baseline_results) > 0 and len(pretrained_results) > 0:
+            avg_baseline = baseline_results["Accuracy"].mean()
+            avg_pretrained = pretrained_results["Accuracy"].mean()
+            avg_improvement = (avg_pretrained - avg_baseline) / avg_baseline * 100
+
+            print("\nOVERALL REAL-WORLD RESULTS:")
+            print(f"  Average Baseline Accuracy:     {avg_baseline:.4f}")
+            print(f"  Average Pretrained Accuracy:   {avg_pretrained:.4f}")
+            print(f"  Average Improvement:           {avg_improvement:+.1f}%")
+
         print("\n💡 REAL-WORLD INSIGHTS:")
         print("   ✅ Unified model works across diverse real datasets")
         print("   ✅ Handles different sequence lengths and feature counts")
         print("   ✅ Column embeddings enable transferability")
+        if len(baseline_results) > 0 and len(pretrained_results) > 0:
+            if avg_improvement > 0:
+                print(
+                    f"   🎯 Multi-dataset pretraining shows {avg_improvement:+.1f}% improvement!"
+                )
+                print(
+                    "      Pretraining on diverse datasets helps real-world performance"
+                )
+            else:
+                print("   ⚠️  Pretraining shows minimal improvement on real-world data")
+                print("      Consider domain-specific pretraining strategies")
 
 
 def main():

@@ -197,6 +197,27 @@ class DualPatchTransformer(pl.LightningModule):
         out = self(batch["x_num"], batch["x_cat"])
         loss = self.loss_fn(out.squeeze(), batch["y"])
         self.log("val_loss", loss, prog_bar=True)
+        
+        # Calculate accuracy for classification tasks
+        if self.task == "classification":
+            preds = torch.argmax(out, dim=1)
+            acc = (preds == batch["y"]).float().mean()
+            self.log("val_acc", acc, prog_bar=True)
+        
+        return loss
+
+    def test_step(self, batch: dict, _batch_idx: int) -> torch.Tensor:
+        """Test step."""
+        out = self(batch["x_num"], batch["x_cat"])
+        loss = self.loss_fn(out.squeeze(), batch["y"])
+        self.log("test_loss", loss, prog_bar=True)
+        
+        # Calculate accuracy for classification tasks
+        if self.task == "classification":
+            preds = torch.argmax(out, dim=1)
+            acc = (preds == batch["y"]).float().mean()
+            self.log("test_acc", acc, prog_bar=True)
+        
         return loss
 
     def configure_optimizers(self):

@@ -1,0 +1,11 @@
+Model,Accuracy,F1 Score,Val Loss,Training Time (s),Parameters,Epochs,Embedding Stats,Dataset,Strategy
+NoPretraining_ETTh1,0.8242424242424242,0.816810035176867,0.49778297543525696,37.98579216003418,577603,8,{'strategy': 'none'},ETTh1,No Pretraining
+Baseline_(No_Columns)_Temperature_Sensors,1.0,1.0,0.0038096774369478226,1.7770357131958008,571459,6,{'strategy': 'none'},Temperature Sensors,Baseline (No Columns)
+Baseline_(No_Columns)_User_Metrics,0.99,0.9900370328807092,0.04240670055150986,1.6943213939666748,573507,6,{'strategy': 'none'},User Metrics,Baseline (No Columns)
+Baseline_(No_Columns)_ETTh1,0.8606060606060606,0.8529579434778578,0.340180367231369,27.278326988220215,577603,6,{'strategy': 'none'},ETTh1,Baseline (No Columns)
+Frozen_BERT_Temperature_Sensors,0.995,0.9949997215260373,0.004540440160781145,1.7695534229278564,576324,6,"{'strategy': 'frozen_bert', 'cached_embeddings': 16, 'cache_size_mb': 0.048168182373046875, 'bert_model': 'bert-base-uncased', 'bert_dim': 768}",Temperature Sensors,Frozen BERT
+Frozen_BERT_User_Metrics,0.995,0.9950002784739627,0.016419924795627594,1.7736999988555908,579396,6,"{'strategy': 'frozen_bert', 'cached_embeddings': 16, 'cache_size_mb': 0.048168182373046875, 'bert_model': 'bert-base-uncased', 'bert_dim': 768}",User Metrics,Frozen BERT
+Frozen_BERT_ETTh1,0.8747474747474747,0.8750958086213354,0.3303605020046234,35.020121574401855,585540,6,"{'strategy': 'frozen_bert', 'cached_embeddings': 16, 'cache_size_mb': 0.048168182373046875, 'bert_model': 'bert-base-uncased', 'bert_dim': 768}",ETTh1,Frozen BERT
+Auto-Expanding_Temperature_Sensors,0.995,0.9949997215260373,0.04662091284990311,2.573552370071411,591572,6,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 4}",Temperature Sensors,Auto-Expanding
+Auto-Expanding_User_Metrics,0.995,0.9950002784739627,0.006821352057158947,2.386423349380493,594644,6,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 5}",User Metrics,Auto-Expanding
+Auto-Expanding_ETTh1,0.8686868686868687,0.8671595718081732,0.3066743314266205,38.14485716819763,600788,6,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 7}",ETTh1,Auto-Expanding
