@@ -45,7 +45,8 @@ def test_ssl_forward():
 
     print(f"Input shape: {x_num.shape}")
     print(
-        f"Input range: {x_num[~torch.isnan(x_num)].min():.3f} to {x_num[~torch.isnan(x_num)].max():.3f}"
+        f"Input range: {x_num[~torch.isnan(x_num)].min():.3f} to "
+        f"{x_num[~torch.isnan(x_num)].max():.3f}"
     )
 
     try:

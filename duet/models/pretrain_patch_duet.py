@@ -106,7 +106,8 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
             )
 
         if ssl_objectives.get("temporal_order", False):
-            # Temporal order head: predict patch ordering (dynamic based on actual patches)
+            # Temporal order head: predict patch ordering
+            # (dynamic based on actual patches)
             # We'll adjust this during forward pass based on actual number of patches
             self.ssl_heads["temporal_order"] = nn.Sequential(
                 nn.Linear(self.hparams.d_model, self.hparams.d_model),
@@ -284,7 +285,8 @@ class PretrainPatchDuET(VariableFeaturePatchDuET):
             if torch.isnan(temporal_features).any() or torch.isnan(order_logits).any():
                 print("NaN in temporal order prediction!")
                 print(
-                    f"  temporal_features has NaN: {torch.isnan(temporal_features).any()}"
+                    "  temporal_features has NaN: "
+                    f"{torch.isnan(temporal_features).any()}"
                 )
                 print(f"  order_logits has NaN: {torch.isnan(order_logits).any()}")
                 print(f"  num_patches: {num_patches}")

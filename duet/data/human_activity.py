@@ -212,7 +212,8 @@ if __name__ == "__main__":
 
     print(f"Dataset size: {len(dataset)}")
     print(
-        f"Features: {dataset.numeric_features} numeric, {dataset.categorical_features} categorical"
+        f"Features: {dataset.numeric_features} numeric, "
+        f"{dataset.categorical_features} categorical"
     )
     print(f"Classes: {dataset.num_classes}")
     print(f"Column names: {dataset.get_column_names()}")

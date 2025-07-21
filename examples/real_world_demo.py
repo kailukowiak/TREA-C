@@ -213,7 +213,8 @@ def real_world_experiment():
             }
 
             print(
-                f"  ✅ Schema: {actual_schemas[dataset_name]['numeric']} numeric features"
+                f"  ✅ Schema: {actual_schemas[dataset_name]['numeric']} "
+                "numeric features"
             )
             print(f"  ✅ Classes: {actual_schemas[dataset_name]['classes']}")
             print(f"  ✅ Sequence length: {actual_schemas[dataset_name]['seq_len']}")
@@ -294,11 +295,13 @@ def real_world_experiment():
 
             print(f"  Dataset: {config['description']}")
             print(
-                f"  Features: {schema['numeric']} numeric + {schema['categorical']} categorical"
+                f"  Features: {schema['numeric']} numeric + "
+                f"{schema['categorical']} categorical"
             )
             print(f"  Classes: {schema['classes']}")
             print(
-                f"  Train samples: {len(train_dataset)}, Val samples: {len(val_dataset)}"
+                f"  Train samples: {len(train_dataset)}, "
+                f"Val samples: {len(val_dataset)}"
             )
             print(f"  Sequence length: {schema['seq_len']}")
 
@@ -360,10 +363,12 @@ def real_world_experiment():
         f"Average accuracy across all datasets: {avg_accuracy:.4f} ± {std_accuracy:.4f}"
     )
     print(
-        f"Feature count range: {df['Total Features'].min()}-{df['Total Features'].max()} features"
+        f"Feature count range: {df['Total Features'].min()}-"
+        f"{df['Total Features'].max()} features"
     )
     print(
-        f"Sequence length range: {df['Sequence Length'].min()}-{df['Sequence Length'].max()} timesteps"
+        f"Sequence length range: {df['Sequence Length'].min()}-"
+        f"{df['Sequence Length'].max()} timesteps"
     )
     print(f"Classes range: {df['Classes'].min()}-{df['Classes'].max()} classes")
 
@@ -390,11 +395,13 @@ def real_world_experiment():
     print("\n🎯 CONCLUSION:")
     print(f"   ✅ Successfully handled {len(results)} diverse real-world datasets")
     print(
-        f"   ✅ Feature range: {df['Total Features'].min()}-{df['Total Features'].max()} features"
+        f"   ✅ Feature range: {df['Total Features'].min()}-"
+        f"{df['Total Features'].max()} features"
     )
     print(f"   ✅ Average performance: {avg_accuracy:.1%}")
     print(
-        f"   ✅ Variable sequence lengths: {df['Sequence Length'].min()}-{df['Sequence Length'].max()} timesteps"
+        f"   ✅ Variable sequence lengths: {df['Sequence Length'].min()}-"
+        f"{df['Sequence Length'].max()} timesteps"
     )
     print("   🚀 REAL-WORLD READY!")
 

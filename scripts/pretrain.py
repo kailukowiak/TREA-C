@@ -94,7 +94,8 @@ def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any
             )
 
         print(
-            f"  Features: {numeric_features} numeric, {categorical_features} categorical"
+            f"  Features: {numeric_features} numeric, "
+            f"{categorical_features} categorical"
         )
         print(f"  Classes: {num_classes}")
         print(f"  Sequence length: {sequence_length}")
@@ -422,7 +423,10 @@ def main():
 
     print("\nTo use this pre-trained model for fine-tuning:")
     print(
-        f"model = PretrainPatchDuET.from_pretrained('{final_checkpoint_path}', num_classes=<your_classes>)"
+        "model = PretrainPatchDuET.from_pretrained(\n"
+        f"    '{final_checkpoint_path}',\n"
+        "    num_classes=<your_classes>\n"
+        ")"
     )
 
 
