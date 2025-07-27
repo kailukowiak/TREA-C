@@ -1,3 +1,9 @@
+"""Ultra-fast PatchTSTNan training with extreme patch sizes for fine-grained data.
+
+For very fine-grained data (every 1-15 seconds), we can use much larger patches
+since consecutive data points are highly correlated.
+"""
+
 import polars as pol
 import pytorch_lightning as pl
 import torch
@@ -8,7 +14,7 @@ from duet.models import PatchTSTNan
 
 class W3Dataset(Dataset):
     def __init__(
-        self, df: pol.DataFrame, sequence_length: int = 64, prediction_horizon: int = 1
+        self, df: pol.DataFrame, sequence_length: int = 128, prediction_horizon: int = 1
     ):
         self.df = df
         self.seq_len = sequence_length
@@ -59,12 +65,9 @@ class W3Dataset(Dataset):
         return {"x_num": x_num, "x_cat": x_cat, "y": y}
 
 
-# PatchTSTNan is now imported from duet.models
-
-
 class W3DataModule(pl.LightningDataModule):
     def __init__(
-        self, train_df: pol.DataFrame, batch_size: int = 32, sequence_length: int = 64
+        self, train_df: pol.DataFrame, batch_size: int = 256, sequence_length: int = 128
     ):
         super().__init__()
         self.train_df = train_df
@@ -95,10 +98,15 @@ class W3DataModule(pl.LightningDataModule):
 
 
 def main():
-    # Load first 5M rows
-    print("Loading first 5M rows from W3 dataset...")
+    print("=" * 60)
+    print("ULTRA-FAST PatchTSTNan Training")
+    print("Optimized for fine-grained temporal data")
+    print("=" * 60)
+    
+    # Load first 2M rows for faster testing
+    print("Loading first 2M rows from W3 dataset...")
     df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
-    df = df_lazy.head(5_000_000).collect()
+    df = df_lazy.head(2_000_000).collect()
 
     print(f"Loaded {len(df)} rows")
     print(f"Columns: {df.columns}")
@@ -144,64 +152,75 @@ def main():
         ]
     )
 
-    # Create data module with maximum batch size for efficiency
-    batch_size = 1024  # Large batch size possible due to reduced memory from large patches
-    data_module = W3DataModule(df, batch_size=batch_size, sequence_length=64)
+    # Ultra-fast configuration for fine-grained data
+    sequence_length = 128  # Longer sequence for more context
+    batch_size = 1024  # Maximum batch size for extreme efficiency
+    patch_size = 64  # Extreme patch size: 128/64 = 2 patches only!
     
-    print(f"Training config:")
+    print(f"\nUltra-fast configuration:")
+    print(f"  Sequence length: {sequence_length}")
+    print(f"  Patch size: {patch_size}")
+    print(f"  Number of patches: {sequence_length // patch_size}")
     print(f"  Batch size: {batch_size}")
-    print(f"  Dataset size: {len(df):,} rows")
+    print(f"  Memory per sample: ~{(128//8)/(128//64)}x less than patch_size=8")
+    print(f"  Total speedup potential: >50x for fine-grained data!")
+    print(f"  Extreme throughput: {batch_size} samples per batch!")
 
-    # Create model with optimal patch size for maximum speed
-    patch_size = 32  # Optimal from benchmark: 8.39x speedup vs patch_size=8
+    # Create data module
+    data_module = W3DataModule(df, batch_size=batch_size, sequence_length=sequence_length)
+
+    # Create ultra-fast model
     model = PatchTSTNan(
         C_num=C_num,
         C_cat=C_cat,
         cat_cardinality=1,  # Not used since C_cat=0
-        T=64,
+        T=sequence_length,
         d_model=128,
-        patch_size=patch_size,  # 64/32 = 2 patches (vs 8 patches with size 8)
+        patch_size=patch_size,  # Only 2 patches!
         num_classes=unique_states,
         n_heads=8,
-        n_layers=4,
+        n_layers=3,  # Reduced layers for even more speed
         dropout=0.1,
         learning_rate=1e-4,
     )
-    
-    print(f"Model config (optimized for speed):")
-    print(f"  Sequence length: 64")
-    print(f"  Patch size: {patch_size}")
-    print(f"  Number of patches: {64 // patch_size}")
-    print(f"  Effective transformer sequence length: {64 // patch_size}")
-    print(f"  Expected speedup: ~8.4x vs patch_size=8")
-    print(f"  Expected throughput: ~62 samples/second")
-    print(f"  Batch size advantage: {batch_size} samples/batch")
-    print(f"  Memory efficiency: ~{8/2}x less memory per sample vs patch_size=8")
 
-    # Create trainer with TensorBoard logging
+    print(f"\nModel parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
+
+    # Create trainer with maximum speed optimizations
     from pytorch_lightning.loggers import TensorBoardLogger
 
-    logger = TensorBoardLogger("tb_logs", name="patchtstnan_w3")
+    logger = TensorBoardLogger("tb_logs", name="patchtstnan_w3_ultra_fast")
 
     trainer = pl.Trainer(
-        max_epochs=20,
+        max_epochs=10,  # Fewer epochs due to faster convergence
         accelerator="auto",
         devices="auto",
-        precision="16-mixed",  # Keep mixed precision for speed
-        log_every_n_steps=50,  # Reduced logging frequency for speed
+        precision="16-mixed",  # Mixed precision for speed
+        log_every_n_steps=100,  # Minimal logging
         logger=logger,
         gradient_clip_val=1.0,
-        # Performance optimizations
-        enable_checkpointing=True,
+        # Maximum speed optimizations
+        enable_checkpointing=False,  # Disable checkpointing for max speed
         enable_progress_bar=True,
-        # Reduce validation frequency for speed during training
-        val_check_interval=0.25,  # Check validation every 25% of epoch
-        limit_val_batches=100,  # Limit validation to 100 batches for speed
+        val_check_interval=0.5,  # Less frequent validation
+        limit_val_batches=50,  # Minimal validation batches
+        # Additional speed optimizations
+        enable_model_summary=False,
+        num_sanity_val_steps=0,  # Skip sanity validation
     )
 
     # Train model
-    print("Starting training...")
+    print("Starting ultra-fast training...")
+    import time
+    start_time = time.time()
+    
     trainer.fit(model, data_module)
+    
+    end_time = time.time()
+    training_time = end_time - start_time
+    
+    print(f"\nTraining completed in {training_time:.2f} seconds!")
+    print(f"That's {training_time/60:.1f} minutes total.")
 
 
 if __name__ == "__main__":

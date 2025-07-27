@@ -7,6 +7,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+from duet.models import PatchTSTNan
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -254,117 +255,7 @@ class PatchTSTClassifier(pl.LightningModule):
         )
 
 
-class PatchTSTNan(pl.LightningModule):
-    """Custom PatchTST with dual-patch NaN handling from DuET."""
-
-    def __init__(
-        self,
-        c_in: int,
-        seq_len: int,
-        num_classes: int,
-        patch_len: int = 16,
-        stride: int = 8,
-        d_model: int = 128,
-        n_head: int = 8,
-        num_layers: int = 3,
-        lr: float = 1e-3,
-    ):
-        super().__init__()
-        self.save_hyperparameters()
-
-        # Patching
-        self.patch_len = patch_len
-        self.stride = stride
-        self.num_patches = (seq_len - patch_len) // stride + 1
-
-        # Patch embedding - NOTE: input size is 2*c_in due to dual-patch (value + mask)
-        self.patch_embedding = nn.Linear(patch_len * (2 * c_in), d_model)
-
-        # Positional encoding
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches, d_model))
-
-        # Transformer
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=n_head, batch_first=True, norm_first=True
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        # Classification head
-        self.head = nn.Linear(d_model, num_classes)
-        self.loss_fn = nn.CrossEntropyLoss()
-
-    def create_patches(self, x):
-        """Create patches from input tensor."""
-        B, C, T = x.shape
-        patches = []
-
-        for i in range(0, T - self.patch_len + 1, self.stride):
-            patch = x[:, :, i : i + self.patch_len]  # [B, C, patch_len]
-            patch = patch.reshape(B, -1)  # [B, C * patch_len]
-            patches.append(patch)
-
-        patches = torch.stack(patches, dim=1)  # [B, num_patches, C * patch_len]
-        return patches
-
-    def forward(self, x_num, x_cat=None):
-        # Apply dual-patch NaN handling from DuET
-        m_nan = torch.isnan(x_num).float()  # [B, C_num, T]
-        x_val = torch.nan_to_num(x_num, nan=0.0)  # [B, C_num, T]
-
-        # Stack value & mask channels (dual-patch)
-        x_num2 = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]
-
-        # Create patches from dual-patch input
-        patches = self.create_patches(x_num2)
-
-        # Embed patches
-        x = self.patch_embedding(patches)
-        x = x + self.pos_embedding
-
-        # Transformer
-        x = self.transformer(x)
-
-        # Global average pooling
-        x = x.mean(dim=1)  # [B, d_model]
-
-        # Classification
-        return self.head(x)
-
-    def training_step(self, batch, _batch_idx):
-        x = batch["x_num"]
-        labels = batch["y"]
-
-        # Ensure labels are in the right format
-        if labels.ndim == 2:
-            labels = torch.argmax(labels, dim=1)
-        labels = labels.long()
-
-        logits = self.forward(x)
-        loss = self.loss_fn(logits, labels)
-
-        self.log("train_loss", loss)
-        return loss
-
-    def validation_step(self, batch, _batch_idx):
-        x = batch["x_num"]
-        labels = batch["y"]
-
-        # Ensure labels are in the right format
-        if labels.ndim == 2:
-            labels = torch.argmax(labels, dim=1)
-        labels = labels.long()
-
-        logits = self.forward(x)
-        loss = self.loss_fn(logits, labels)
-
-        self.log("val_loss", loss)
-        preds = logits.argmax(dim=1)
-        acc = (preds == labels).float().mean()
-        self.log("val_acc", acc)
-        return {"val_loss": loss, "preds": preds, "labels": labels}
-
-    def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+# PatchTSTNan is now imported from duet.models
 
 
 class CNNClassifier(pl.LightningModule):
