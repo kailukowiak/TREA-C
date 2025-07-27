@@ -15,8 +15,8 @@ from torch.utils.data import DataLoader, Dataset
 from duet.models import PatchTSTNan
 
 
-class W3SimpleDataset(Dataset):
-    """Simple dataset that loads a fixed subset of data upfront for fast training."""
+class W3StreamingDataset(Dataset):
+    """Efficient streaming dataset that loads data on-demand for full dataset training."""
 
     def __init__(
         self,
@@ -25,104 +25,137 @@ class W3SimpleDataset(Dataset):
         numeric_cols: list,
         state_to_label: dict,
         sequence_length: int = 128,
-        max_total_rows: int = 50000,  # Limit total data loaded
+        max_sequences_per_well: int = 10000,  # Limit sequences per well for memory
     ):
+        self.parquet_path = parquet_path
+        self.well_names = well_names
         self.numeric_cols = numeric_cols
+        self.state_to_label = state_to_label
         self.seq_len = sequence_length
+        self.max_sequences_per_well = max_sequences_per_well
+
+        print(f"Setting up streaming dataset for {len(well_names)} wells...")
+
+        # Pre-compute sequence indices without loading data
+        self.sequence_indices = []
         
-        print(f"Loading subset of data from {len(well_names)} wells (max {max_total_rows} rows)...")
-        
-        # Load a manageable subset of data
+        # Get row counts per well efficiently
         df_lazy = pol.scan_parquet(parquet_path)
-        
-        # Load data from wells with row limit - USE CLASS INSTEAD OF STATE  
-        all_data = (
-            df_lazy
+        well_counts = (
+            df_lazy.filter(pol.col("well_name").str.contains("WELL"))
             .filter(pol.col("well_name").is_in(well_names))
-            .filter(pol.col("class").is_not_null())  # Use class column
-            .drop("state")  # Drop state column
-            .head(max_total_rows)  # Limit total rows
+            .filter(pol.col("class").is_not_null())
+            .group_by("well_name")
+            .len()
+            .collect()
+        )
+
+        total_sequences = 0
+        for row in well_counts.iter_rows():
+            well_name, count = row
+            if count >= sequence_length + 1:  # Need at least seq_len + 1 for target
+                # Calculate possible sequences for this well
+                possible_sequences = count - sequence_length
+                # Limit sequences per well to prevent memory issues
+                actual_sequences = min(possible_sequences, max_sequences_per_well)
+                
+                # Create indices for this well (step size to sample evenly)
+                if possible_sequences > max_sequences_per_well:
+                    step = possible_sequences // max_sequences_per_well
+                    starts = range(0, possible_sequences, step)[:max_sequences_per_well]
+                else:
+                    starts = range(possible_sequences)
+                
+                for start_idx in starts:
+                    self.sequence_indices.append((well_name, start_idx))
+                    total_sequences += 1
+
+        print(f"Created {total_sequences} sequence indices (streaming mode)")
+
+        # Cache for recently loaded well data (LRU with max 3 wells)
+        from functools import lru_cache
+        self._well_cache = {}
+        self._cache_order = []
+        self._max_cache_size = 3
+
+    def _load_well_data(self, well_name):
+        """Load and cache data for a specific well."""
+        if well_name in self._well_cache:
+            # Move to end (most recently used)
+            self._cache_order.remove(well_name)
+            self._cache_order.append(well_name)
+            return self._well_cache[well_name]
+
+        # Load this well's data
+        df_lazy = pol.scan_parquet(self.parquet_path)
+        well_data = (
+            df_lazy.filter(pol.col("well_name") == well_name)
+            .filter(pol.col("well_name").str.contains("WELL"))
+            .filter(pol.col("class").is_not_null())
+            .drop("state")
             .with_columns([pol.col("class").cast(pol.Utf8)])
-            .with_columns([pol.col("class").replace_strict(state_to_label)])
+            .with_columns([pol.col("class").replace_strict(self.state_to_label)])
             .collect()
             .to_pandas()
         )
-        
-        print(f"Loaded {len(all_data)} rows, creating sequences...")
-        
-        # Create all sequences upfront
-        sequences = []
-        nan_count_by_well = {}
-        
-        for well_name in all_data['well_name'].unique():
-            well_data = all_data[all_data['well_name'] == well_name]
-            well_nan_count = 0
-            
-            # Create sequences for this well
-            for i in range(len(well_data) - sequence_length):
-                start_idx = i
-                end_idx = i + sequence_length
-                target_idx = end_idx
-                
-                if target_idx < len(well_data):
-                    sequence_data = well_data.iloc[start_idx:end_idx]
-                    target_state = well_data.iloc[target_idx]['class']  # Use class column
-                    
-                    # Extract features with NaN checking
-                    numeric_values = sequence_data[numeric_cols].values
-                    
-                    # Check for NaN/inf values
-                    has_nan = np.any(np.isnan(numeric_values)) or np.any(np.isinf(numeric_values))
-                    
-                    if has_nan:
-                        well_nan_count += 1
-                        # Skip sequences with too many NaNs for this problematic well
-                        if well_name == "WELL-00033" and well_nan_count > 100:
-                            continue  # Skip this well's remaining sequences
-                        # Replace NaN/inf with 0 for stability
-                        numeric_values = np.nan_to_num(numeric_values, nan=0.0, posinf=0.0, neginf=0.0)
-                    
-                    # CRITICAL: Simple but effective normalization 
-                    # Apply z-score normalization with outlier clipping
-                    numeric_values_norm = np.zeros_like(numeric_values)
-                    for col_idx in range(numeric_values.shape[1]):
-                        col_data = numeric_values[:, col_idx]
-                        # Simple z-score: (x - mean) / std, then clip
-                        mean_val = np.mean(col_data)
-                        std_val = np.std(col_data)
-                        if std_val > 1e-8:  # Only normalize if there's variation
-                            normalized = (col_data - mean_val) / std_val
-                            # Clip extreme values to prevent model overflow
-                            normalized = np.clip(normalized, -3, 3)
-                            numeric_values_norm[:, col_idx] = normalized
-                        else:
-                            # No variation - set to zero
-                            numeric_values_norm[:, col_idx] = 0.0
-                    
-                    numeric_values = numeric_values_norm
-                    
-                    x_num = torch.tensor(numeric_values, dtype=torch.float32).T  # [C_num, T]
-                    
-                    x_cat = torch.empty((0, sequence_length), dtype=torch.long)
-                    y = torch.tensor(target_state, dtype=torch.long)
-                    
-                    sequences.append({"x_num": x_num, "x_cat": x_cat, "y": y})
-            
-            if well_nan_count > 0:
-                nan_count_by_well[well_name] = well_nan_count
-        
-        # Report NaN statistics
-        if nan_count_by_well:
-            print(f"Wells with NaN sequences: {dict(list(nan_count_by_well.items())[:5])}")  # Show first 5
-        
-        self.sequences = sequences
-        print(f"Created {len(sequences)} sequences - ready for training!")
+
+        # Add to cache
+        self._well_cache[well_name] = well_data
+        self._cache_order.append(well_name)
+
+        # Remove oldest if cache is full
+        if len(self._cache_order) > self._max_cache_size:
+            oldest_well = self._cache_order.pop(0)
+            del self._well_cache[oldest_well]
+
+        return well_data
 
     def __len__(self):
-        return len(self.sequences)
+        return len(self.sequence_indices)
 
     def __getitem__(self, idx):
-        return self.sequences[idx]
+        well_name, start_idx = self.sequence_indices[idx]
+        
+        # Load well data (cached)
+        well_data = self._load_well_data(well_name)
+        
+        if start_idx + self.seq_len >= len(well_data):
+            # Fallback to last valid sequence
+            start_idx = max(0, len(well_data) - self.seq_len - 1)
+        
+        end_idx = start_idx + self.seq_len
+        target_idx = end_idx
+
+        # Extract sequence data
+        sequence_data = well_data.iloc[start_idx:end_idx]
+        target_state = well_data.iloc[target_idx]["class"]
+
+        # Extract numeric features
+        numeric_values = sequence_data[self.numeric_cols].values
+
+        # Handle NaN/inf values efficiently
+        has_nan = np.any(np.isnan(numeric_values)) or np.any(np.isinf(numeric_values))
+        if has_nan:
+            numeric_values = np.nan_to_num(numeric_values, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Fast normalization (per-sequence)
+        numeric_values_norm = np.zeros_like(numeric_values)
+        for col_idx in range(numeric_values.shape[1]):
+            col_data = numeric_values[:, col_idx]
+            mean_val = np.mean(col_data)
+            std_val = np.std(col_data)
+            if std_val > 1e-8:
+                normalized = (col_data - mean_val) / std_val
+                normalized = np.clip(normalized, -3, 3)
+                numeric_values_norm[:, col_idx] = normalized
+            else:
+                numeric_values_norm[:, col_idx] = 0.0
+
+        x_num = torch.tensor(numeric_values_norm, dtype=torch.float32).T
+        x_cat = torch.empty((0, self.seq_len), dtype=torch.long)
+        y = torch.tensor(target_state, dtype=torch.long)
+
+        return {"x_num": x_num, "x_cat": x_cat, "y": y}
 
 
 class W3Dataset(Dataset):
@@ -183,57 +216,74 @@ class W3Dataset(Dataset):
 class W3DataModule(pl.LightningDataModule):
     def __init__(
         self,
-        parquet_path: str = None,
+        train_parquet_path: str = None,
+        test_parquet_path: str = None,
         train_df: pol.DataFrame = None,
         metadata: dict = None,
         batch_size: int = 256,
         sequence_length: int = 128,
-        use_streaming: bool = True,
+        use_curated_split: bool = True,
     ):
         super().__init__()
-        self.parquet_path = parquet_path
+        self.train_parquet_path = train_parquet_path
+        self.test_parquet_path = test_parquet_path
         self.train_df = train_df
         self.metadata = metadata
         self.batch_size = batch_size
         self.sequence_length = sequence_length
-        self.use_streaming = use_streaming
+        self.use_curated_split = use_curated_split
 
     def setup(self, stage=None):
-        if self.use_streaming and self.parquet_path and self.metadata:
-            # Use streaming dataset for large data
-            print("Setting up streaming datasets...")
+        if (
+            self.use_curated_split
+            and self.train_parquet_path
+            and self.test_parquet_path
+            and self.metadata
+        ):
+            # Use curated train/test split for proper evaluation
+            print("Setting up curated train/test datasets...")
 
-            # Get all well names efficiently
-            df_lazy = pol.scan_parquet(self.parquet_path)
-            wells = (
-                df_lazy.select("well_name").unique().collect()["well_name"].to_list()
+            # Get all wells from training data (filter for real wells)
+            df_lazy = pol.scan_parquet(self.train_parquet_path)
+            train_wells = (
+                df_lazy.select("well_name")
+                .filter(pol.col("well_name").str.contains("WELL"))  # Only real wells
+                .unique()
+                .collect()["well_name"]
+                .to_list()
             )
 
-            # Split wells for train/val
-            n_train_wells = int(0.8 * len(wells))
-            train_wells = wells[:n_train_wells]
-            val_wells = wells[n_train_wells:]
-
-            print(
-                f"Using {len(train_wells)} wells for training, {len(val_wells)} for validation"
+            # Get all wells from test data (filter for real wells)
+            test_df_lazy = pol.scan_parquet(self.test_parquet_path)
+            test_wells = (
+                test_df_lazy.select("well_name")
+                .filter(pol.col("well_name").str.contains("WELL"))  # Only real wells
+                .unique()
+                .collect()["well_name"]
+                .to_list()
             )
 
-            self.train_dataset = W3SimpleDataset(
-                parquet_path=self.parquet_path,
+            print(f"Training wells: {len(train_wells)} real wells from train.parquet")
+            print(f"Validation wells: {len(test_wells)} real wells from test.parquet")
+
+            # Create streaming training dataset from FULL train.parquet 
+            self.train_dataset = W3StreamingDataset(
+                parquet_path=self.train_parquet_path,
                 well_names=train_wells,
                 numeric_cols=self.metadata["numeric_cols"],
                 state_to_label=self.metadata["state_to_label"],
                 sequence_length=self.sequence_length,
-                max_total_rows=100000,  # Scale up dataset size 10x
+                max_sequences_per_well=50000,  # Much larger per well for full dataset
             )
 
-            self.val_dataset = W3SimpleDataset(
-                parquet_path=self.parquet_path,
-                well_names=val_wells,
+            # Create streaming validation dataset from FULL test.parquet
+            self.val_dataset = W3StreamingDataset(
+                parquet_path=self.test_parquet_path,
+                well_names=test_wells,
                 numeric_cols=self.metadata["numeric_cols"],
                 state_to_label=self.metadata["state_to_label"],
                 sequence_length=self.sequence_length,
-                max_total_rows=20000,  # Scale up validation 10x
+                max_sequences_per_well=10000,  # Reasonable validation size
             )
 
         else:
@@ -316,7 +366,7 @@ def extract_dataset_metadata():
     return {
         "total_rows": total_rows,
         "unique_states": len(unique_classes),  # Keep name for compatibility
-        "state_to_label": class_to_label,     # Keep name for compatibility  
+        "state_to_label": class_to_label,  # Keep name for compatibility
         "numeric_cols": numeric_cols,
         "wells_count": wells_count,
         "C_num": len(numeric_cols),
@@ -333,82 +383,69 @@ def main():
     # Phase 1: Extract metadata efficiently
     metadata = extract_dataset_metadata()
 
-    # For initial testing, use subset. Later we'll use streaming
+    # Using curated train/test split with streaming for FULL datasets
     print("\n" + "=" * 60)
-    print("LOADING TRAINING SUBSET")
+    print("USING FULL DATASET WITH STREAMING")
     print("=" * 60)
+    print("✓ Training data: FULL data/W3/train.parquet (streaming)")
+    print("✓ Test data: FULL data/W3/test.parquet (streaming)")
+    print("✓ Efficient LRU caching (max 3 wells in memory)")
+    print("✓ No upfront data loading - sequences generated on-demand")
+    print("✓ This enables training on the complete 66M+ row dataset")
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
-    # Use larger subset but not full dataset yet
-    df = (
-        df_lazy.filter(pol.col("class").is_not_null())  # Use class column
-        .drop("state")  # Drop state column
-        .head(1_000_000)  # 1M rows for testing
-        .collect()
-    )
+    # Phase 1: Scaled configuration for maximum GPU utilization (target: 8-15GB)
+    sequence_length = 1024  # Longer sequences for more data per sample
+    batch_size = 512  # Much larger batch size for GPU efficiency
+    patch_size = 16  # Proven stable patches: 1024/16 = 64 patches
 
-    print(f"Loaded {len(df)} rows for training")
-
-    # Convert class to string then to integer labels using metadata
-    df = df.with_columns([pol.col("class").cast(pol.Utf8)])
-
-    # Remove rows where all numeric values are null
-    df = df.filter(
-        ~pol.all_horizontal(
-            [pol.col(col).is_null() for col in metadata["numeric_cols"]]
-        )
-    )
-
-    print(f"After filtering null numeric rows: {len(df)} rows")
-
-    # Convert classes to integer labels using pre-computed mapping
-    df = df.with_columns([pol.col("class").replace_strict(metadata["state_to_label"])])
-
-    # Proven stable configuration from ETTh1 test, scaled up for GPU utilization
-    sequence_length = 512  # Keep larger sequences for more data per sample
-    batch_size = 256  # Large batch but stable with proven model size
-    patch_size = 16   # Proven stable patches from ETTh1: 512/16 = 32 patches (with stride=8 = ~64 patches)
-
-    print("\nUltra-fast configuration:")
-    print(f"  Sequence length: {sequence_length}")
+    print("\nPhase 1: GPU-Optimized Configuration:")
+    print(f"  Sequence length: {sequence_length} (2x longer)")
     print(f"  Patch size: {patch_size}")
-    print(f"  Number of patches: {sequence_length // patch_size}")
-    print(f"  Batch size: {batch_size}")
-    print(f"  Memory per sample: ~{(128 // 8) / (128 // 64)}x less than patch_size=8")
-    print("  Total speedup potential: >50x for fine-grained data!")
-    print(f"  Batch throughput: {batch_size} samples per batch (testing size)")
+    stride_patches = (sequence_length - patch_size) // 8 + 1
+    std_patches = sequence_length // patch_size
+    print(f"  Patches: {std_patches} standard (~{stride_patches} with stride)")
+    print(f"  Batch size: {batch_size} (2x larger)")
+    effective_batch_size = batch_size * 8  # With gradient accumulation
+    print(f"  Effective batch size: {effective_batch_size}")
+    print(f"  Model size: d_model={128}, heads={8}, layers={4}")
+    print("  Target GPU usage: 8-15GB (vs previous 0.57GB)")
+    print("  Expected speedup: 10-20x through GPU utilization")
 
-    # Use streaming dataset for full data efficiency
+    # Use streaming datasets for full data training
     print("\n" + "=" * 60)
-    print("CREATING STREAMING DATA MODULE")
+    print("CREATING FULL DATASET STREAMING MODULE")
     print("=" * 60)
 
-    # Create data module with streaming support
+    # Create data module with curated train/test split
+    train_path = "/home/ubuntu/DuET/data/W3/train.parquet"
+    test_path = "/home/ubuntu/DuET/data/W3/test.parquet"
+
     data_module = W3DataModule(
-        parquet_path="/home/ubuntu/DuET/data/W3/train.parquet",
+        train_parquet_path=train_path,
+        test_parquet_path=test_path,
         metadata=metadata,
         batch_size=batch_size,
         sequence_length=sequence_length,
-        use_streaming=True,  # Enable streaming for full dataset
+        use_curated_split=True,  # Use proper train/test split
     )
 
-    # Create model with proven ETTh1-compatible configuration
+    # Create larger model for maximum GPU utilization and capacity
     model = PatchTSTNan(
         c_in=metadata["C_num"],  # Use c_in parameter name for stride-based mode
         seq_len=sequence_length,  # Use seq_len parameter name
         num_classes=metadata["unique_states"],
-        patch_len=16,  # Smaller patches proven to work (ETTh1 config)
-        stride=8,     # Smaller stride proven to work (ETTh1 config)
-        d_model=64,   # Proven stable size from ETTh1 test
-        n_head=4,     # Proven stable heads from ETTh1 test
-        num_layers=2, # Proven stable layers from ETTh1 test
-        lr=1e-3,      # Proven stable learning rate from ETTh1 test
-        task='classification'  # Explicit task specification
+        patch_len=16,  # Proven stable patches
+        stride=8,  # Proven stable stride
+        d_model=128,  # Larger model dimension for better capacity
+        n_head=8,  # More attention heads for richer representations
+        num_layers=4,  # Deeper model for better learning capacity
+        dropout=0.15,  # Moderate dropout for regularization
+        lr=5e-4,  # Lower learning rate for larger model
+        task="classification",  # Explicit task specification
     )
 
-    print(
-        f"\nModel parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
-    )
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\nModel parameters: {total_params:,}")
 
     # Apply performance optimizations
     print("\n" + "=" * 60)
@@ -429,23 +466,25 @@ def main():
     logger = TensorBoardLogger("tb_logs", name="patchtstnan_w3_ultra_fast")
 
     trainer = pl.Trainer(
-        max_epochs=10,  # More epochs for proper training
+        max_epochs=15,  # More epochs for larger model
         accelerator="auto",
         devices="auto",
-        precision="16-mixed",  # Re-enable mixed precision for speed
-        log_every_n_steps=20,  # Normal logging frequency
+        precision="16-mixed",  # Mixed precision for speed and memory efficiency
+        log_every_n_steps=10,  # More frequent logging for monitoring
         logger=logger,
-        gradient_clip_val=1.0,  # Standard gradient clipping
-        # Production settings
-        enable_checkpointing=True,  # Enable checkpointing for longer runs
+        gradient_clip_val=1.0,  # Gradient clipping for stability
+        # Production settings for larger training
+        enable_checkpointing=True,  # Checkpointing for longer runs
         enable_progress_bar=True,
-        val_check_interval=0.25,  # Frequent validation for monitoring
-        limit_val_batches=25,  # More validation batches
-        # Optimizations
-        enable_model_summary=True,  # Show model structure
-        num_sanity_val_steps=2,  # Standard sanity checks
-        # No anomaly detection in production
-        accumulate_grad_batches=4,  # Gradient accumulation for effective batch size of 1024 (256*4)
+        val_check_interval=0.5,  # Validation every half epoch
+        limit_val_batches=50,  # More validation batches for stable metrics
+        # Phase 1 optimizations
+        enable_model_summary=True,  # Show detailed model structure
+        num_sanity_val_steps=2,
+        accumulate_grad_batches=8,  # Effective batch size: 512*8 = 4096
+        # Additional optimizations for large models
+        detect_anomaly=False,  # Disable for production speed
+        benchmark=True,  # Optimize CUDA kernels
     )
 
     # Train model
