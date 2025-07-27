@@ -16,7 +16,12 @@ from duet.models import PatchTSTNan
 
 
 class W3StreamingDataset(Dataset):
-    """Efficient streaming dataset that loads data on-demand for full dataset training."""
+    """
+    Efficient dataset that pre-loads all requested well data into memory to
+    avoid slow, repetitive file reads. This is much faster for training but
+    requires more RAM. The 'streaming' name is kept for compatibility but
+    it now functions as an in-memory dataset.
+    """
 
     def __init__(
         self,
@@ -34,95 +39,71 @@ class W3StreamingDataset(Dataset):
         self.seq_len = sequence_length
         self.max_sequences_per_well = max_sequences_per_well
 
-        print(f"Setting up streaming dataset for {len(well_names)} wells...")
+        print(f"Setting up in-memory dataset for {len(well_names)} wells...")
+        print("Pre-loading all well data... This may take a moment.")
 
-        # Pre-compute sequence indices without loading data
-        self.sequence_indices = []
-        
-        # Get row counts per well efficiently
-        df_lazy = pol.scan_parquet(parquet_path)
-        well_counts = (
-            df_lazy.filter(pol.col("well_name").str.contains("WELL"))
-            .filter(pol.col("well_name").is_in(well_names))
-            .filter(pol.col("class").is_not_null())
-            .group_by("well_name")
-            .len()
-            .collect()
-        )
-
-        total_sequences = 0
-        for row in well_counts.iter_rows():
-            well_name, count = row
-            if count >= sequence_length + 1:  # Need at least seq_len + 1 for target
-                # Calculate possible sequences for this well
-                possible_sequences = count - sequence_length
-                # Limit sequences per well to prevent memory issues
-                actual_sequences = min(possible_sequences, max_sequences_per_well)
-                
-                # Create indices for this well (step size to sample evenly)
-                if possible_sequences > max_sequences_per_well:
-                    step = possible_sequences // max_sequences_per_well
-                    starts = range(0, possible_sequences, step)[:max_sequences_per_well]
-                else:
-                    starts = range(possible_sequences)
-                
-                for start_idx in starts:
-                    self.sequence_indices.append((well_name, start_idx))
-                    total_sequences += 1
-
-        print(f"Created {total_sequences} sequence indices (streaming mode)")
-
-        # Cache for recently loaded well data (LRU with max 3 wells)
-        from functools import lru_cache
-        self._well_cache = {}
-        self._cache_order = []
-        self._max_cache_size = 3
-
-    def _load_well_data(self, well_name):
-        """Load and cache data for a specific well."""
-        if well_name in self._well_cache:
-            # Move to end (most recently used)
-            self._cache_order.remove(well_name)
-            self._cache_order.append(well_name)
-            return self._well_cache[well_name]
-
-        # Load this well's data
+        # Load all data for the specified wells at once for maximum performance
         df_lazy = pol.scan_parquet(self.parquet_path)
-        well_data = (
-            df_lazy.filter(pol.col("well_name") == well_name)
+        all_well_data = (
+            df_lazy.filter(pol.col("well_name").is_in(self.well_names))
             .filter(pol.col("well_name").str.contains("WELL"))
             .filter(pol.col("class").is_not_null())
             .drop("state")
             .with_columns([pol.col("class").cast(pol.Utf8)])
             .with_columns([pol.col("class").replace_strict(self.state_to_label)])
             .collect()
-            .to_pandas()
         )
 
-        # Add to cache
-        self._well_cache[well_name] = well_data
-        self._cache_order.append(well_name)
+        # Store pandas dataframes in a dictionary for fast lookups
+        self.well_data_store = {
+            name: df.to_pandas() for name, df in all_well_data.group_by("well_name")
+        }
+        print("All well data is now loaded into memory.")
 
-        # Remove oldest if cache is full
-        if len(self._cache_order) > self._max_cache_size:
-            oldest_well = self._cache_order.pop(0)
-            del self._well_cache[oldest_well]
+        # Pre-compute sequence indices from the in-memory data
+        self.sequence_indices = []
+        total_sequences = 0
+        for well_name, well_data in self.well_data_store.items():
+            count = len(well_data)
+            if count >= sequence_length + 1:  # Need at least seq_len + 1 for target
+                # Calculate possible sequences for this well
+                possible_sequences = count - sequence_length
+                # Limit sequences per well to prevent memory issues
+                actual_sequences = min(possible_sequences, self.max_sequences_per_well)
 
-        return well_data
+                # Create indices for this well (step size to sample evenly)
+                if possible_sequences > self.max_sequences_per_well:
+                    step = possible_sequences // self.max_sequences_per_well
+                    starts = range(0, possible_sequences, step)[
+                        : self.max_sequences_per_well
+                    ]
+                else:
+                    starts = range(possible_sequences)
+
+                for start_idx in starts:
+                    self.sequence_indices.append((well_name, start_idx))
+
+                total_sequences += len(starts)
+
+        print(f"Created {total_sequences} sequence indices (from in-memory data)")
+
+    def _load_well_data(self, well_name):
+        """Retrieves pre-loaded well data from the in-memory store."""
+        return self.well_data_store[well_name]
 
     def __len__(self):
         return len(self.sequence_indices)
 
     def __getitem__(self, idx):
         well_name, start_idx = self.sequence_indices[idx]
-        
-        # Load well data (cached)
+
+        # Load well data (from memory, very fast)
         well_data = self._load_well_data(well_name)
-        
+
         if start_idx + self.seq_len >= len(well_data):
             # Fallback to last valid sequence
             start_idx = max(0, len(well_data) - self.seq_len - 1)
-        
+
         end_idx = start_idx + self.seq_len
         target_idx = end_idx
 
@@ -136,7 +117,9 @@ class W3StreamingDataset(Dataset):
         # Handle NaN/inf values efficiently
         has_nan = np.any(np.isnan(numeric_values)) or np.any(np.isinf(numeric_values))
         if has_nan:
-            numeric_values = np.nan_to_num(numeric_values, nan=0.0, posinf=0.0, neginf=0.0)
+            numeric_values = np.nan_to_num(
+                numeric_values, nan=0.0, posinf=0.0, neginf=0.0
+            )
 
         # Fast normalization (per-sequence)
         numeric_values_norm = np.zeros_like(numeric_values)
@@ -266,7 +249,7 @@ class W3DataModule(pl.LightningDataModule):
             print(f"Training wells: {len(train_wells)} real wells from train.parquet")
             print(f"Validation wells: {len(test_wells)} real wells from test.parquet")
 
-            # Create streaming training dataset from FULL train.parquet 
+            # Create streaming training dataset from FULL train.parquet
             self.train_dataset = W3StreamingDataset(
                 parquet_path=self.train_parquet_path,
                 well_names=train_wells,

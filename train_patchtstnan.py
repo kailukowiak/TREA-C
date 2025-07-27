@@ -145,9 +145,11 @@ def main():
     )
 
     # Create data module with maximum batch size for efficiency
-    batch_size = 1024  # Large batch size possible due to reduced memory from large patches
+    batch_size = (
+        1024  # Large batch size possible due to reduced memory from large patches
+    )
     data_module = W3DataModule(df, batch_size=batch_size, sequence_length=64)
-    
+
     print(f"Training config:")
     print(f"  Batch size: {batch_size}")
     print(f"  Dataset size: {len(df):,} rows")
@@ -167,7 +169,7 @@ def main():
         dropout=0.1,
         learning_rate=1e-4,
     )
-    
+
     print(f"Model config (optimized for speed):")
     print(f"  Sequence length: 64")
     print(f"  Patch size: {patch_size}")
@@ -176,7 +178,7 @@ def main():
     print(f"  Expected speedup: ~8.4x vs patch_size=8")
     print(f"  Expected throughput: ~62 samples/second")
     print(f"  Batch size advantage: {batch_size} samples/batch")
-    print(f"  Memory efficiency: ~{8/2}x less memory per sample vs patch_size=8")
+    print(f"  Memory efficiency: ~{8 / 2}x less memory per sample vs patch_size=8")
 
     # Create trainer with TensorBoard logging
     from pytorch_lightning.loggers import TensorBoardLogger

@@ -11,11 +11,11 @@ import pytorch_lightning as pl
 
 class PatchTSTNan(pl.LightningModule):
     """PatchTST with dual-patch NaN handling.
-    
+
     This model handles missing values by encoding them in a dual-patch format:
     - Value channel: original reading, NaNs replaced by 0
     - Mask channel: 1 if the reading was missing, else 0
-    
+
     Args:
         C_num: Number of numeric input channels
         C_cat: Number of categorical input channels
@@ -44,7 +44,7 @@ class PatchTSTNan(pl.LightningModule):
         n_layers: int = 2,
         dropout: float = 0.1,
         learning_rate: float = 1e-3,
-        task: str = 'classification',
+        task: str = "classification",
         # Alternative parameter names for compatibility
         c_in: int = None,
         seq_len: int = None,
@@ -62,12 +62,12 @@ class PatchTSTNan(pl.LightningModule):
             C_num = c_in
         elif C_num is None:
             raise ValueError("Either C_num or c_in must be provided")
-            
+
         if seq_len is not None:
             T = seq_len
         elif T is None:
             T = 64  # Default value
-            
+
         if patch_len is not None:
             patch_size = patch_len
         if n_head is not None:
@@ -117,16 +117,16 @@ class PatchTSTNan(pl.LightningModule):
 
         # Transformer encoder
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, 
-            nhead=n_heads, 
-            dropout=dropout, 
+            d_model=d_model,
+            nhead=n_heads,
+            dropout=dropout,
             batch_first=True,
-            norm_first=True if stride is not None else False
+            norm_first=True if stride is not None else False,
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
 
         # Output head
-        if task == 'classification':
+        if task == "classification":
             self.head = nn.Linear(d_model, num_classes)
             self.loss_fn = nn.CrossEntropyLoss()
         else:  # regression
@@ -168,7 +168,7 @@ class PatchTSTNan(pl.LightningModule):
         # Stack value and mask channels (dual-patch)
         x_num_with_mask = torch.cat([x_val, m_nan], dim=1)  # [B, 2*C_num, T]
 
-        if hasattr(self, 'patch_embedding'):
+        if hasattr(self, "patch_embedding"):
             # Stride-based patching method
             patches = self.create_patches_stride(x_num_with_mask)
             z_patches = self.patch_embedding(patches)  # [B, n_patches, d_model]
@@ -183,7 +183,9 @@ class PatchTSTNan(pl.LightningModule):
                 z_num = z_num + cat_emb.permute(0, 2, 1)
 
             # Create patches
-            z_patches = self.create_patches_standard(z_num)  # [B, C*n_patches, patch_size]
+            z_patches = self.create_patches_standard(
+                z_num
+            )  # [B, C*n_patches, patch_size]
 
             # Project patches to model dimension
             z_patches = self.patch_proj(z_patches)  # [B, C*n_patches, d_model]
@@ -193,7 +195,7 @@ class PatchTSTNan(pl.LightningModule):
             z_patches = z_patches.view(B, n_channel_patches, self.d_model)
 
         # Add positional embeddings
-        if hasattr(self, 'patch_embedding'):
+        if hasattr(self, "patch_embedding"):
             # For stride-based method, pos_embed shape matches directly
             z_patches = z_patches + self.pos_embed
         else:
@@ -216,7 +218,7 @@ class PatchTSTNan(pl.LightningModule):
         # Output head
         output = self.head(z_pooled)
 
-        if self.task == 'regression':
+        if self.task == "regression":
             output = output.squeeze(-1)  # Remove last dimension for regression
 
         return output
@@ -226,7 +228,7 @@ class PatchTSTNan(pl.LightningModule):
 
         # Handle different label formats
         labels = batch["y"]
-        if self.task == 'classification':
+        if self.task == "classification":
             # Ensure labels are in the right format
             if labels.ndim == 2:
                 labels = torch.argmax(labels, dim=1)
@@ -237,19 +239,19 @@ class PatchTSTNan(pl.LightningModule):
         loss = self.loss_fn(output, labels)
 
         # Calculate metrics
-        if self.task == 'classification':
+        if self.task == "classification":
             preds = torch.argmax(output, dim=1)
             acc = (preds == labels).float().mean()
             self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
-        
+
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         output = self(batch["x_num"], batch.get("x_cat"))
-        
+
         labels = batch["y"]
-        if self.task == 'classification':
+        if self.task == "classification":
             if labels.ndim == 2:
                 labels = torch.argmax(labels, dim=1)
             labels = labels.long()
@@ -259,7 +261,7 @@ class PatchTSTNan(pl.LightningModule):
         loss = self.loss_fn(output, labels)
 
         # Calculate metrics
-        if self.task == 'classification':
+        if self.task == "classification":
             preds = torch.argmax(output, dim=1)
             acc = (preds == labels).float().mean()
             self.log("val_acc", acc, on_epoch=True, prog_bar=True)

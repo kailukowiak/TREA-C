@@ -17,8 +17,7 @@ print(f"Testing with well: {test_well}")
 start_time = time.time()
 
 well_data = (
-    df_lazy
-    .filter(pol.col("well_name") == test_well)
+    df_lazy.filter(pol.col("well_name") == test_well)
     .filter(pol.col("state").is_not_null())
     .collect()
 )
@@ -34,8 +33,7 @@ test_wells = wells[:5]
 start_time = time.time()
 
 multi_well_data = (
-    df_lazy
-    .filter(pol.col("well_name").is_in(test_wells))
+    df_lazy.filter(pol.col("well_name").is_in(test_wells))
     .filter(pol.col("state").is_not_null())
     .collect()
 )

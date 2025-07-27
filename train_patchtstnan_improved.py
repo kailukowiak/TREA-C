@@ -11,7 +11,7 @@ from duet.models import PatchTSTNan
 
 class ImprovedW3Dataset(Dataset):
     """Optimized dataset class for the improved W3 data."""
-    
+
     def __init__(
         self, df: pol.DataFrame, sequence_length: int = 64, prediction_horizon: int = 1
     ):
@@ -22,7 +22,7 @@ class ImprovedW3Dataset(Dataset):
         self.numeric_cols = [
             col for col in df.columns if col not in ["state", "well_name"]
         ]
-        
+
         print(f"Dataset initialization:")
         print(f"  Total rows: {len(df):,}")
         print(f"  Numeric features: {len(self.numeric_cols)}")
@@ -35,9 +35,9 @@ class ImprovedW3Dataset(Dataset):
         # Pre-compute sequences efficiently
         print("Pre-computing sequences...")
         start_time = time.time()
-        
+
         self.sequences = []
-        
+
         # Group by well and create sequences
         for well_name, group in self.data.groupby("well_name"):
             group_len = len(group)
@@ -46,14 +46,20 @@ class ImprovedW3Dataset(Dataset):
                 if group_len > 10000:
                     # Take every Nth sequence for very large wells
                     step = max(1, group_len // 5000)  # Max 5000 sequences per well
-                    valid_starts = range(0, group_len - self.seq_len - self.pred_horizon + 1, step)
+                    valid_starts = range(
+                        0, group_len - self.seq_len - self.pred_horizon + 1, step
+                    )
                 else:
                     # For smaller wells, take every 5th sequence
-                    valid_starts = range(0, group_len - self.seq_len - self.pred_horizon + 1, 5)
-                
+                    valid_starts = range(
+                        0, group_len - self.seq_len - self.pred_horizon + 1, 5
+                    )
+
                 for start_idx in valid_starts:
-                    self.sequences.append((well_name, start_idx, start_idx + self.seq_len))
-        
+                    self.sequences.append(
+                        (well_name, start_idx, start_idx + self.seq_len)
+                    )
+
         compute_time = time.time() - start_time
         print(f"Pre-computed {len(self.sequences):,} sequences in {compute_time:.2f}s")
 
@@ -62,7 +68,9 @@ class ImprovedW3Dataset(Dataset):
 
     def __getitem__(self, idx):
         well_name, start_idx, end_idx = self.sequences[idx]
-        well_data = self.data[self.data["well_name"] == well_name].iloc[start_idx:end_idx]
+        well_data = self.data[self.data["well_name"] == well_name].iloc[
+            start_idx:end_idx
+        ]
 
         # Extract numeric features
         x_num = torch.tensor(
@@ -86,11 +94,11 @@ class ImprovedW3Dataset(Dataset):
 
 class ImprovedW3DataModule(pl.LightningDataModule):
     def __init__(
-        self, 
-        df: pol.DataFrame, 
-        batch_size: int = 512, 
+        self,
+        df: pol.DataFrame,
+        batch_size: int = 512,
         sequence_length: int = 64,
-        num_workers: int = 8
+        num_workers: int = 8,
     ):
         super().__init__()
         self.df = df
@@ -105,8 +113,9 @@ class ImprovedW3DataModule(pl.LightningDataModule):
 
         # Randomize well assignment
         import random
+
         random.shuffle(wells)
-        
+
         train_wells = wells[:n_train_wells]
         val_wells = wells[n_train_wells:]
 
@@ -120,26 +129,30 @@ class ImprovedW3DataModule(pl.LightningDataModule):
         print(f"  Train rows: {len(train_df):,}")
         print(f"  Val rows: {len(val_df):,}")
 
-        self.train_dataset = ImprovedW3Dataset(train_df, sequence_length=self.sequence_length)
-        self.val_dataset = ImprovedW3Dataset(val_df, sequence_length=self.sequence_length)
+        self.train_dataset = ImprovedW3Dataset(
+            train_df, sequence_length=self.sequence_length
+        )
+        self.val_dataset = ImprovedW3Dataset(
+            val_df, sequence_length=self.sequence_length
+        )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, 
-            batch_size=self.batch_size, 
-            shuffle=True, 
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
-            persistent_workers=True if self.num_workers > 0 else False
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, 
-            batch_size=self.batch_size, 
+            self.val_dataset,
+            batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
-            persistent_workers=True if self.num_workers > 0 else False
+            persistent_workers=True if self.num_workers > 0 else False,
         )
 
 
@@ -151,7 +164,7 @@ def main():
 
     # Configuration
     USE_TEST_DATASET = True  # Set to False for full 5M dataset
-    
+
     if USE_TEST_DATASET:
         dataset_path = "/home/ubuntu/DuET/data/W3/improved_train_5M_test_500K.parquet"
         print("Using TEST dataset (500K rows) for validation")
@@ -196,15 +209,13 @@ def main():
     print(f"State mapping: {state_to_label}")
 
     # Convert states to integer labels
-    df = df.with_columns([
-        pol.col("state").replace_strict(state_to_label)
-    ])
+    df = df.with_columns([pol.col("state").replace_strict(state_to_label)])
 
     # Optimized configuration for speed
     sequence_length = 64
     batch_size = 1024  # Large batch for efficiency
-    patch_size = 32    # Optimized patch size (64/32 = 2 patches)
-    num_workers = 8    # Parallel data loading
+    patch_size = 32  # Optimized patch size (64/32 = 2 patches)
+    num_workers = 8  # Parallel data loading
 
     print(f"\nOptimized configuration:")
     print(f"  Sequence length: {sequence_length}")
@@ -217,10 +228,10 @@ def main():
     # Create data module
     print(f"\nCreating data module...")
     data_module = ImprovedW3DataModule(
-        df, 
-        batch_size=batch_size, 
+        df,
+        batch_size=batch_size,
         sequence_length=sequence_length,
-        num_workers=num_workers
+        num_workers=num_workers,
     )
 
     # Create optimized model
@@ -235,7 +246,7 @@ def main():
         n_layers=3,  # Reduced for speed
         dropout=0.1,
         learning_rate=1e-3,
-        task='classification'
+        task="classification",
     )
 
     model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -245,16 +256,18 @@ def main():
     print(f"\nTesting data loading speed...")
     data_module.setup("fit")
     train_loader = data_module.train_dataloader()
-    
+
     print(f"Number of batches: {len(train_loader):,}")
-    
+
     # Time first few batches
     start_time = time.time()
     for i, batch in enumerate(train_loader):
         if i >= 3:
             break
-        print(f"  Batch {i+1}: x_num {batch['x_num'].shape}, y unique: {torch.unique(batch['y'])}")
-    
+        print(
+            f"  Batch {i + 1}: x_num {batch['x_num'].shape}, y unique: {torch.unique(batch['y'])}"
+        )
+
     data_time = time.time() - start_time
     avg_batch_time = data_time / 3
     print(f"Average data loading time: {avg_batch_time:.3f}s per batch")
@@ -267,22 +280,22 @@ def main():
     model.eval()
     with torch.no_grad():
         sample_batch = next(iter(train_loader))
-        
+
         start_time = time.time()
-        output = model(sample_batch['x_num'], sample_batch['x_cat'])
+        output = model(sample_batch["x_num"], sample_batch["x_cat"])
         forward_time = time.time() - start_time
-        
+
         print(f"Forward pass time: {forward_time:.3f}s")
         print(f"Output shape: {output.shape}")
         print(f"Output range: [{output.min():.3f}, {output.max():.3f}]")
         print(f"Contains NaN: {torch.isnan(output).any()}")
-        
+
         # Test loss
         loss_fn = torch.nn.CrossEntropyLoss()
-        loss = loss_fn(output, sample_batch['y'])
+        loss = loss_fn(output, sample_batch["y"])
         print(f"Sample loss: {loss.item():.4f}")
         print(f"Loss is NaN: {torch.isnan(loss)}")
-        
+
         if torch.isnan(loss):
             print("❌ Still getting NaN loss!")
             return
@@ -291,8 +304,9 @@ def main():
 
     # Training setup
     max_epochs = 10 if USE_TEST_DATASET else 5
-    
+
     from pytorch_lightning.loggers import TensorBoardLogger
+
     logger = TensorBoardLogger("tb_logs", name="patchtstnan_w3_improved")
 
     trainer = pl.Trainer(
@@ -308,36 +322,39 @@ def main():
         val_check_interval=0.25,
         limit_val_batches=50 if USE_TEST_DATASET else None,
         # Fast dev run for testing
-        fast_dev_run=False
+        fast_dev_run=False,
     )
 
     # Start training
     print(f"\nStarting training for {max_epochs} epochs...")
-    print(f"Expected time per epoch: ~{len(train_loader) * avg_batch_time / 60:.1f} minutes")
-    
+    print(
+        f"Expected time per epoch: ~{len(train_loader) * avg_batch_time / 60:.1f} minutes"
+    )
+
     total_start_time = time.time()
-    
+
     try:
         trainer.fit(model, data_module)
-        
+
         total_time = time.time() - total_start_time
         print(f"\n" + "=" * 60)
         print("TRAINING COMPLETED!")
         print("=" * 60)
-        print(f"Total time: {total_time/60:.1f} minutes")
-        print(f"Time per epoch: {total_time/max_epochs/60:.1f} minutes")
-        
+        print(f"Total time: {total_time / 60:.1f} minutes")
+        print(f"Time per epoch: {total_time / max_epochs / 60:.1f} minutes")
+
         if trainer.callback_metrics:
             print(f"\nFinal metrics:")
             for key, value in trainer.callback_metrics.items():
                 if isinstance(value, torch.Tensor):
                     print(f"  {key}: {value.item():.4f}")
-        
+
         print(f"\n✅ Success! No NaN loss issues.")
-        
+
     except Exception as e:
         print(f"❌ Training failed: {e}")
         import traceback
+
         traceback.print_exc()
 
 
