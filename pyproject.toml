@@ -23,6 +23,7 @@ dependencies = [
     "transformers>=4.53.2",
     "huggingface-hub>=0.33.4",
     "ipykernel>=6.29.5",
+    "polars>=1.31.0",
 ]
 
 [tool.setuptools.packages.find]
