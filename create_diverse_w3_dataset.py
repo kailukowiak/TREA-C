@@ -1,9 +1,9 @@
 """Create a diverse 5M row W3 dataset with proper sampling and filtering."""
 
-import polars as pol
 import time
+
 import numpy as np
-from collections import Counter
+import polars as pol
 
 
 def analyze_full_dataset_structure():
@@ -35,7 +35,7 @@ def analyze_full_dataset_structure():
         well_sample = df_lazy.select("well_name").head(100_000).collect()
         unique_wells = well_sample["well_name"].unique().to_list()
 
-        print(f"Sample of well names:")
+        print("Sample of well names:")
         for i, well in enumerate(unique_wells[:10]):
             print(f"  {well}")
         print(f"... and {len(unique_wells) - 10} more")
@@ -44,7 +44,7 @@ def analyze_full_dataset_structure():
         wells_with_well = [w for w in unique_wells if "WELL" in str(w).upper()]
         wells_without_well = [w for w in unique_wells if "WELL" not in str(w).upper()]
 
-        print(f"\nWell name analysis:")
+        print("\nWell name analysis:")
         print(f"  Wells containing 'WELL': {len(wells_with_well)}")
         print(f"  Wells NOT containing 'WELL': {len(wells_without_well)}")
 
@@ -62,8 +62,8 @@ def analyze_full_dataset_structure():
 
 def create_diverse_sampling_strategy(df_lazy, target_rows=5_000_000):
     """Create a sampling strategy to get diverse data across the full dataset."""
-    print(f"\n" + "=" * 60)
-    print(f"CREATING DIVERSE SAMPLING STRATEGY")
+    print("\n" + "=" * 60)
+    print("CREATING DIVERSE SAMPLING STRATEGY")
     print(f"Target: {target_rows:,} rows")
     print("=" * 60)
 
@@ -72,7 +72,7 @@ def create_diverse_sampling_strategy(df_lazy, target_rows=5_000_000):
     try:
         total_rows = df_lazy.select(pol.len()).collect().item()
         print(f"Total available rows: {total_rows:,}")
-    except:
+    except Exception:
         total_rows = 10_000_000  # Conservative estimate
         print(f"Estimated total rows: {total_rows:,}")
 
@@ -86,7 +86,7 @@ def create_diverse_sampling_strategy(df_lazy, target_rows=5_000_000):
     num_chunks = 20  # Sample from 20 different parts of the dataset
     chunk_size = target_rows // num_chunks
 
-    print(f"Sampling strategy:")
+    print("Sampling strategy:")
     print(f"  Number of chunks: {num_chunks}")
     print(f"  Rows per chunk: {chunk_size:,}")
 
@@ -116,7 +116,7 @@ def create_diverse_sampling_strategy(df_lazy, target_rows=5_000_000):
 
 def sample_diverse_data(df_lazy, chunk_positions):
     """Sample data from multiple chunks with filtering."""
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("SAMPLING DIVERSE DATA")
     print("=" * 60)
 
@@ -150,7 +150,7 @@ def sample_diverse_data(df_lazy, chunk_positions):
                 samples.append(chunk)
                 total_sampled += len(chunk)
             else:
-                print(f"  No valid data in this chunk")
+                print("  No valid data in this chunk")
 
         except Exception as e:
             print(f"  Error processing chunk: {e}")
@@ -170,7 +170,7 @@ def sample_diverse_data(df_lazy, chunk_positions):
 
 def analyze_dataset_quality(df):
     """Analyze the quality and diversity of the sampled dataset."""
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("ANALYZING DATASET QUALITY")
     print("=" * 60)
 
@@ -183,7 +183,7 @@ def analyze_dataset_quality(df):
 
     # State analysis
     state_counts = df["state"].value_counts().sort("state")
-    print(f"\nState distribution:")
+    print("\nState distribution:")
     print(state_counts)
 
     unique_states = df["state"].n_unique()
@@ -235,12 +235,11 @@ def analyze_dataset_quality(df):
         .sort("row_count", descending=True)
     )
 
-    print(f"\nWell statistics:")
-    print(
-        f"  Wells with multiple states: {(well_state_counts['unique_states'] > 1).sum()}"
-    )
+    print("\nWell statistics:")
+    wells_with_multiple_states = (well_state_counts["unique_states"] > 1).sum()
+    print(f"  Wells with multiple states: {wells_with_multiple_states}")
     print(f"  Average rows per well: {well_state_counts['row_count'].mean():.0f}")
-    print(f"  Top wells by size:")
+    print("  Top wells by size:")
     print(well_state_counts.head(5))
 
     return unique_states >= 2
@@ -250,7 +249,7 @@ def save_improved_dataset(
     df, output_path="/home/ubuntu/DuET/data/W3/improved_train_5M.parquet"
 ):
     """Save the improved dataset."""
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("SAVING IMPROVED DATASET")
     print("=" * 60)
 
@@ -319,19 +318,19 @@ def main():
     output_path, test_path = save_improved_dataset(df_improved)
 
     if output_path:
-        print(f"\n" + "=" * 60)
+        print("\n" + "=" * 60)
         print("SUCCESS!")
         print("=" * 60)
-        print(f"✅ Created improved W3 dataset")
+        print("✅ Created improved W3 dataset")
         print(f"   Main dataset: {output_path}")
         print(f"   Test dataset: {test_path}")
-        print(f"   Ready for training with PatchTSTNan!")
+        print("   Ready for training with PatchTSTNan!")
 
         # Quick test recommendation
-        print(f"\n🚀 Next steps:")
-        print(f"   1. Test with: train_patchtstnan_quick_test.py (using test dataset)")
-        print(f"   2. Full training: train_patchtstnan.py (using main dataset)")
-        print(f"   3. Monitor for NaN loss - should be fixed!")
+        print("\n🚀 Next steps:")
+        print("   1. Test with: train_patchtstnan_quick_test.py (using test dataset)")
+        print("   2. Full training: train_patchtstnan.py (using main dataset)")
+        print("   3. Monitor for NaN loss - should be fixed!")
 
 
 if __name__ == "__main__":

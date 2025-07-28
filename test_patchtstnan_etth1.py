@@ -1,12 +1,13 @@
 """Test PatchTSTNan on ETTh1 dataset to validate the consolidated implementation."""
 
-import torch
 import pytorch_lightning as pl
+import torch
+
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.models import PatchTSTNan
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.etth1 import ETTh1Dataset
+from duet.models import PatchTSTNan
 
 
 def test_patchtstnan():
@@ -71,7 +72,7 @@ def test_patchtstnan():
 
     # Get a sample batch to inspect
     sample_batch = next(iter(train_loader))
-    print(f"Sample batch shapes:")
+    print("Sample batch shapes:")
     print(f"- x_num: {sample_batch['x_num'].shape}")
     print(
         f"- x_cat: {sample_batch['x_cat'].shape if 'x_cat' in sample_batch else 'N/A'}"
@@ -79,12 +80,11 @@ def test_patchtstnan():
     print(f"- y: {sample_batch['y'].shape}")
     print(f"- y unique values: {torch.unique(sample_batch['y'])}")
     print(f"- x_num contains NaN: {torch.isnan(sample_batch['x_num']).any()}")
-    print(
-        f"- x_num range: [{sample_batch['x_num'].min():.3f}, {sample_batch['x_num'].max():.3f}]"
-    )
+    x_min, x_max = sample_batch["x_num"].min(), sample_batch["x_num"].max()
+    print(f"- x_num range: [{x_min:.3f}, {x_max:.3f}]")
 
     # Create model with stride-based patching (like in compare_models_etth1.py)
-    print(f"\nCreating PatchTSTNan model...")
+    print("\nCreating PatchTSTNan model...")
 
     model = PatchTSTNan(
         c_in=c_in,  # Use c_in parameter name for compatibility
@@ -99,12 +99,11 @@ def test_patchtstnan():
         task="classification",
     )
 
-    print(
-        f"Model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
-    )
+    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Model parameters: {params:,}")
 
     # Test forward pass
-    print(f"\nTesting forward pass...")
+    print("\nTesting forward pass...")
     model.eval()
     with torch.no_grad():
         try:

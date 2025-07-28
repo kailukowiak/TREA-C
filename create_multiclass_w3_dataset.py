@@ -1,8 +1,6 @@
 """Create W3 dataset with guaranteed multi-class distribution."""
 
 import polars as pol
-import time
-from collections import Counter
 
 
 def find_diverse_state_regions():
@@ -35,7 +33,8 @@ def find_diverse_state_regions():
                 if unique_states > 1:
                     wells = chunk["well_name"].n_unique()
                     print(
-                        f"✅ Position {pos:,}: {unique_states} states {state_list}, {wells} wells"
+                        f"✅ Position {pos:,}: {unique_states} states "
+                        f"{state_list}, {wells} wells"
                     )
                     diverse_regions.append((pos, chunk_size, unique_states, state_list))
                 else:
@@ -107,7 +106,7 @@ def create_multiclass_dataset_v1():
 
     # Analyze class distribution
     class_counts = combined_df["target"].value_counts().sort("target")
-    print(f"\nClass distribution in combined dataset:")
+    print("\nClass distribution in combined dataset:")
     print(class_counts)
 
     unique_classes = combined_df["target"].n_unique()
@@ -150,7 +149,7 @@ def create_multiclass_dataset_v2():
             q25 = pressure_values.quantile(0.25)
             q75 = pressure_values.quantile(0.75)
 
-            print(f"Creating pressure-based classes:")
+            print("Creating pressure-based classes:")
             print(f"  Low pressure: < {q25:.2f}")
             print(f"  Medium pressure: {q25:.2f} - {q75:.2f}")
             print(f"  High pressure: > {q75:.2f}")
@@ -169,7 +168,7 @@ def create_multiclass_dataset_v2():
 
             # Check distribution
             target_counts = df_with_target["target"].value_counts().sort("target")
-            print(f"Synthetic target distribution:")
+            print("Synthetic target distribution:")
             print(target_counts)
 
             return df_with_target
@@ -186,7 +185,7 @@ def save_and_test_dataset(df, strategy_name):
     if df is None:
         return None, None
 
-    print(f"\n" + "=" * 40)
+    print("\n" + "=" * 40)
     print(f"SAVING {strategy_name} DATASET")
     print("=" * 40)
 
@@ -201,7 +200,7 @@ def save_and_test_dataset(df, strategy_name):
     df_test = df.head(500_000)
     df_test.write_parquet(test_path)
 
-    print(f"✅ Saved datasets:")
+    print("✅ Saved datasets:")
     print(f"   Main: {output_path} ({len(df):,} rows)")
     print(f"   Test: {test_path} ({len(df_test):,} rows)")
 
@@ -210,9 +209,9 @@ def save_and_test_dataset(df, strategy_name):
     unique_targets = df[target_col].n_unique()
     target_dist = df[target_col].value_counts().sort(target_col)
 
-    print(f"Final dataset quality:")
+    print("Final dataset quality:")
     print(f"  Unique targets: {unique_targets}")
-    print(f"  Distribution:")
+    print("  Distribution:")
     print(target_dist)
 
     return output_path, test_path
@@ -229,10 +228,10 @@ def main():
         print(f"\n✅ Found {len(diverse_regions)} regions with state diversity")
         print("This confirms that multi-class data exists in the dataset")
     else:
-        print(f"\n⚠️  No state diversity found - will use alternative strategies")
+        print("\n⚠️  No state diversity found - will use alternative strategies")
 
     # Try Strategy 1: Use class column
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("ATTEMPTING STRATEGY 1: CLASS COLUMN")
     print("=" * 60)
 
@@ -242,13 +241,13 @@ def main():
         print("✅ Strategy 1 successful!")
         main_path, test_path = save_and_test_dataset(df_class, "class")
 
-        print(f"\n🚀 Ready for training!")
-        print(f"Use: train_patchtstnan_improved.py")
+        print("\n🚀 Ready for training!")
+        print("Use: train_patchtstnan_improved.py")
         print(f"Update dataset path to: {test_path}")
         return
 
     # Try Strategy 2: Synthetic classes
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("ATTEMPTING STRATEGY 2: SYNTHETIC CLASSES")
     print("=" * 60)
 
@@ -258,15 +257,15 @@ def main():
         print("✅ Strategy 2 successful!")
         main_path, test_path = save_and_test_dataset(df_synthetic, "synthetic")
 
-        print(f"\n🚀 Ready for training!")
-        print(f"Use: train_patchtstnan_improved.py")
+        print("\n🚀 Ready for training!")
+        print("Use: train_patchtstnan_improved.py")
         print(f"Update dataset path to: {test_path}")
         return
 
     # If both fail
-    print(f"\n❌ Both strategies failed")
-    print(f"Recommendation: Switch to regression task")
-    print(f"Use any sensor (e.g., P-PDG) as continuous target")
+    print("\n❌ Both strategies failed")
+    print("Recommendation: Switch to regression task")
+    print("Use any sensor (e.g., P-PDG) as continuous target")
 
 
 if __name__ == "__main__":

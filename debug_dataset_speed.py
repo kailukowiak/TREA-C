@@ -1,7 +1,9 @@
 """Quick test to debug dataset loading speed."""
 
 import time
+
 import polars as pol
+
 
 # Test how long it takes to load a single well
 print("Testing single well loading speed...")

@@ -1,7 +1,8 @@
 """Diagnose why we're getting NaN loss with 100% accuracy."""
 
-import torch
 import polars as pol
+import torch
+
 from duet.models import PatchTSTNan
 from train_patchtstnan_ultra_fast import W3SimpleDataset, extract_dataset_metadata
 
@@ -79,7 +80,7 @@ def diagnose_nan_loss():
 
                 # Check if outputs are too extreme
                 if torch.max(output) > 100:
-                    print(f"  WARNING: Very large output values detected!")
+                    print("  WARNING: Very large output values detected!")
 
             except Exception as e:
                 print(f"  ERROR: {e}")

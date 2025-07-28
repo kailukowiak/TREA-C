@@ -1,9 +1,10 @@
 """Fix W3 dataset issues: single class problem and data leakage."""
 
-import polars as pol
-import numpy as np
-import torch
 from collections import Counter
+
+import pandas as pd
+import polars as pol
+import torch
 
 
 def analyze_w3_data_distribution():
@@ -31,7 +32,7 @@ def analyze_w3_data_distribution():
 
         # State distribution
         state_counts = df_clean["state"].value_counts()
-        print(f"State distribution:")
+        print("State distribution:")
         print(state_counts)
 
         unique_states = df_clean["state"].n_unique()
@@ -43,7 +44,7 @@ def analyze_w3_data_distribution():
         else:
             print(f"❌ Only 1 class found in {sample_size:,} rows")
 
-    print(f"⚠️  Could not find multi-class data in any sample size")
+    print("⚠️  Could not find multi-class data in any sample size")
     return None, None
 
 
@@ -96,7 +97,7 @@ def create_balanced_w3_dataset():
 
     # Final state distribution
     final_states = df_combined["state"].value_counts()
-    print(f"Final state distribution:")
+    print("Final state distribution:")
     print(final_states)
 
     return df_combined
@@ -208,7 +209,6 @@ def test_fixed_dataset(df):
 
     # Create a small test
     from duet.models import PatchTSTNan
-    import torch
 
     # Create sample data
     sample_data = df.head(1000).to_pandas()
@@ -246,7 +246,7 @@ def test_fixed_dataset(df):
         "y": torch.stack(y_list),
     }
 
-    print(f"Test batch:")
+    print("Test batch:")
     print(f"  x_num: {batch['x_num'].shape}")
     print(f"  y: {batch['y'].shape}")
     print(f"  y values: {torch.unique(batch['y'])}")
@@ -269,7 +269,7 @@ def test_fixed_dataset(df):
     with torch.no_grad():
         output = model(batch["x_num"], batch["x_cat"])
 
-        print(f"\nModel test:")
+        print("\nModel test:")
         print(f"  Output shape: {output.shape}")
         print(f"  Output range: [{output.min():.3f}, {output.max():.3f}]")
         print(f"  Contains NaN: {torch.isnan(output).any()}")
@@ -292,8 +292,6 @@ def test_fixed_dataset(df):
 
 
 def main():
-    import pandas as pd  # Import here
-
     print("W3 Dataset Fix Tool")
     print("Addressing single-class and NaN loss issues")
 

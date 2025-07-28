@@ -7,12 +7,13 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from duet.models import PatchTSTNan
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from sklearn.metrics import accuracy_score, f1_score
 from transformers import PatchTSTConfig, PatchTSTModel
+
+from duet.models import PatchTSTNan
 
 
 sys.path.append(".")

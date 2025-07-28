@@ -1,8 +1,9 @@
 """Benchmark different patch sizes for PatchTSTNan performance optimization."""
 
 import time
+
 import torch
-import polars as pol
+
 from duet.models import PatchTSTNan
 
 
@@ -26,9 +27,8 @@ def benchmark_patch_size(patch_size, C_num=20, T=64, batch_size=128, num_batches
     # Calculate effective sequence length
     n_patches = T // patch_size
     print(f"Effective transformer sequence length: {n_patches}")
-    print(
-        f"Model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
-    )
+    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Model parameters: {params:,}")
 
     # Create sample data
     x_num = torch.randn(batch_size, C_num, T)
@@ -46,7 +46,7 @@ def benchmark_patch_size(patch_size, C_num=20, T=64, batch_size=128, num_batches
 
     with torch.no_grad():
         for _ in range(num_batches):
-            output = model(x_num, x_cat)
+            model(x_num, x_cat)
 
     torch.cuda.synchronize() if torch.cuda.is_available() else None
     end_time = time.time()
@@ -57,9 +57,8 @@ def benchmark_patch_size(patch_size, C_num=20, T=64, batch_size=128, num_batches
 
     print(f"Average time per batch: {avg_time_per_batch:.4f}s")
     print(f"Samples per second: {samples_per_second:.1f}")
-    print(
-        f"Speedup vs patch_size=8: {get_speedup_ratio(patch_size, avg_time_per_batch):.2f}x"
-    )
+    speedup = get_speedup_ratio(patch_size, avg_time_per_batch)
+    print(f"Speedup vs patch_size=8: {speedup:.2f}x")
 
     return {
         "patch_size": patch_size,
@@ -107,7 +106,8 @@ def main():
                 print(f"Error with patch_size={patch_size}: {e}")
         else:
             print(
-                f"Skipping patch_size={patch_size} (64 is not divisible by {patch_size})"
+                f"Skipping patch_size={patch_size} "
+                f"(64 is not divisible by {patch_size})"
             )
 
     # Summary
@@ -115,9 +115,11 @@ def main():
     print("BENCHMARK SUMMARY")
     print("=" * 60)
 
-    print(
-        f"{'Patch Size':<12} {'Patches':<8} {'Params':<10} {'Time/Batch':<12} {'Samples/s':<12} {'Speedup':<8}"
+    header = (
+        f"{'Patch Size':<12} {'Patches':<8} {'Params':<10} {'Time/Batch':<12} "
+        f"{'Samples/s':<12} {'Speedup':<8}"
     )
+    print(header)
     print("-" * 70)
 
     baseline_time = None
@@ -127,10 +129,14 @@ def main():
 
         speedup = baseline_time / result["time_per_batch"] if baseline_time else 1.0
 
-        print(
-            f"{result['patch_size']:<12} {result['n_patches']:<8} {result['params']:<10,} "
-            f"{result['time_per_batch']:<12.4f} {result['samples_per_second']:<12.1f} {speedup:<8.2f}x"
+        row = (
+            f"{result['patch_size']:<12} {result['n_patches']:<8} "
+            f"{result['params']:,<10} "
+            f"{result['time_per_batch']:.4f} "
+            f"{result['samples_per_second']:.1f} "
+            f"{speedup:.2f}x"
         )
+        print(row)
 
     # Recommendations
     print("\n" + "=" * 60)
@@ -140,19 +146,21 @@ def main():
     if results:
         best_result = max(results, key=lambda x: x["samples_per_second"])
         print(f"Fastest configuration: patch_size={best_result['patch_size']}")
-        print(
-            f"Expected speedup: {baseline_time / best_result['time_per_batch']:.2f}x faster"
-            if baseline_time
-            else "N/A"
-        )
+        if baseline_time:
+            speedup = baseline_time / best_result["time_per_batch"]
+            print(f"Expected speedup: {speedup:.2f}x faster")
+        else:
+            print("N/A")
 
-        print(f"\nFor W3 dataset training:")
+        print("\nFor W3 dataset training:")
         print(f"- Use patch_size={best_result['patch_size']} for maximum speed")
         print(
-            f"- This reduces transformer sequence from 8 to {best_result['n_patches']} patches"
+            f"- This reduces transformer sequence from 8 to "
+            f"{best_result['n_patches']} patches"
         )
         print(
-            f"- Expected throughput: ~{best_result['samples_per_second']:.0f} samples/second"
+            f"- Expected throughput: ~{best_result['samples_per_second']:.0f} "
+            f"samples/second"
         )
 
 

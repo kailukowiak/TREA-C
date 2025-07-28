@@ -142,20 +142,20 @@ def show_exact_w3_issue():
     loss_fn = nn.CrossEntropyLoss()
     loss = loss_fn(logits, labels)
 
-    print(f"\nLoss computation:")
+    print("\nLoss computation:")
     print(f"Result: {loss}")
     print(f"Is NaN: {torch.isnan(loss)}")
 
     # Show why it's NaN
-    print(f"\nWhy it's NaN:")
+    print("\nWhy it's NaN:")
     print(f"1. Softmax of single logit: {torch.softmax(logits[:4], dim=1)}")
     print(f"2. Log of softmax: {torch.log_softmax(logits[:4], dim=1)}")
-    print(f"3. All values are the same → gradient = 0 → NaN in backprop")
+    print("3. All values are the same → gradient = 0 → NaN in backprop")
 
-    print(f"\n🔍 Root cause:")
-    print(f"   CrossEntropyLoss needs class diversity to compute meaningful gradients")
-    print(f"   With only 1 class, there's no 'choice' for the model to learn")
-    print(f"   Result: Mathematical instability → NaN")
+    print("\n🔍 Root cause:")
+    print("   CrossEntropyLoss needs class diversity to compute meaningful gradients")
+    print("   With only 1 class, there's no 'choice' for the model to learn")
+    print("   Result: Mathematical instability → NaN")
 
 
 if __name__ == "__main__":

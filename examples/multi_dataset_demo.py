@@ -1088,7 +1088,8 @@ def real_world_experiment():
         if len(baseline_results) > 0 and len(pretrained_results) > 0:
             if avg_improvement > 0:
                 print(
-                    f"   🎯 Multi-dataset pretraining shows {avg_improvement:+.1f}% improvement!"
+                    f"   🎯 Multi-dataset pretraining shows "
+                    f"{avg_improvement:+.1f}% improvement!"
                 )
                 print(
                     "      Pretraining on diverse datasets helps real-world performance"

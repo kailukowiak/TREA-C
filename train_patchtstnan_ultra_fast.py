@@ -9,6 +9,8 @@ import polars as pol
 import pytorch_lightning as pl
 import torch
 
+from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader, Dataset
 
 from duet.models import PatchTSTNan
@@ -445,9 +447,16 @@ def main():
     print("✓ Set torch threads to 8")
 
     # Create trainer with maximum speed optimizations
-    from pytorch_lightning.loggers import TensorBoardLogger
 
     logger = TensorBoardLogger("tb_logs", name="patchtstnan_w3_ultra_fast")
+
+    # Add early stopping to prevent overfitting
+    early_stopping_callback = EarlyStopping(
+        monitor="val_loss",  # Metric to monitor
+        patience=3,  # Number of epochs with no improvement to wait
+        verbose=True,  # Print a message when stopping
+        mode="min",  # Stop when the metric stops decreasing
+    )
 
     trainer = pl.Trainer(
         max_epochs=15,  # More epochs for larger model
@@ -456,6 +465,7 @@ def main():
         precision="16-mixed",  # Mixed precision for speed and memory efficiency
         log_every_n_steps=10,  # More frequent logging for monitoring
         logger=logger,
+        callbacks=[early_stopping_callback],  # Add the callback here
         gradient_clip_val=1.0,  # Gradient clipping for stability
         # Production settings for larger training
         enable_checkpointing=True,  # Checkpointing for longer runs

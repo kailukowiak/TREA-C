@@ -4,9 +4,11 @@ This module implements the PatchTSTNan model that combines patch-based processin
 with robust NaN handling using dual-channel encoding (value + mask).
 """
 
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
+
+from torchmetrics.classification import Accuracy, F1Score
 
 
 class PatchTSTNan(pl.LightningModule):
@@ -28,7 +30,7 @@ class PatchTSTNan(pl.LightningModule):
         n_layers: Number of transformer layers (default: 2)
         dropout: Dropout rate (default: 0.1)
         learning_rate: Learning rate (default: 1e-3)
-        task: Task type, either 'classification' or 'regression' (default: 'classification')
+        task: Task type, 'classification' or 'regression' (default: 'classification')
     """
 
     def __init__(
@@ -121,7 +123,7 @@ class PatchTSTNan(pl.LightningModule):
             nhead=n_heads,
             dropout=dropout,
             batch_first=True,
-            norm_first=True if stride is not None else False,
+            norm_first=stride is not None,
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
 
@@ -135,6 +137,16 @@ class PatchTSTNan(pl.LightningModule):
 
         # Dropout
         self.dropout = nn.Dropout(dropout)
+
+        # Metrics
+        if self.task == "classification":
+            self.train_accuracy = Accuracy(
+                task="multiclass", num_classes=self.num_classes
+            )
+            self.val_accuracy = Accuracy(
+                task="multiclass", num_classes=self.num_classes
+            )
+            self.val_f1 = F1Score(task="multiclass", num_classes=self.num_classes)
 
     def create_patches_standard(self, x):
         """Convert time series to patches (standard method)"""
@@ -240,9 +252,14 @@ class PatchTSTNan(pl.LightningModule):
 
         # Calculate metrics
         if self.task == "classification":
-            preds = torch.argmax(output, dim=1)
-            acc = (preds == labels).float().mean()
-            self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
+            self.train_accuracy.update(output, labels)
+            self.log(
+                "train_acc",
+                self.train_accuracy,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+            )
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -262,9 +279,10 @@ class PatchTSTNan(pl.LightningModule):
 
         # Calculate metrics
         if self.task == "classification":
-            preds = torch.argmax(output, dim=1)
-            acc = (preds == labels).float().mean()
-            self.log("val_acc", acc, on_epoch=True, prog_bar=True)
+            self.val_accuracy.update(output, labels)
+            self.val_f1.update(output, labels)
+            self.log("val_acc", self.val_accuracy, on_epoch=True, prog_bar=True)
+            self.log("val_f1", self.val_f1, on_epoch=True, prog_bar=True)
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
         return loss

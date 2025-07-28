@@ -1,7 +1,6 @@
 """Investigate why W3 dataset has only one state value across 66M rows."""
 
 import polars as pol
-import numpy as np
 
 
 def deep_state_analysis():
@@ -35,7 +34,7 @@ def deep_state_analysis():
         null_count = state_analysis["null_count"][0]
         total_rows = state_analysis["total_rows"][0]
 
-        print(f"\nDetailed breakdown:")
+        print("\nDetailed breakdown:")
         print(f"  Total rows: {total_rows:,}")
         print(f"  Unique states: {unique_states}")
         print(f"  State range: {min_state} to {max_state}")
@@ -56,9 +55,9 @@ def deep_state_analysis():
         unique_vals = state_values["state"].unique().to_list()
         value_counts = state_values["state"].value_counts()
 
-        print(f"State values sample (first 100K rows):")
+        print("State values sample (first 100K rows):")
         print(f"  Unique values: {unique_vals}")
-        print(f"  Value counts:")
+        print("  Value counts:")
         print(value_counts)
 
     except Exception as e:
@@ -83,7 +82,7 @@ def deep_state_analysis():
         # Sample class values
         class_values = df_lazy.select("class").head(100_000).collect()
         class_counts = class_values["class"].value_counts()
-        print(f"Class value counts (sample):")
+        print("Class value counts (sample):")
         print(class_counts)
 
     except Exception as e:
@@ -165,9 +164,9 @@ def explore_other_classification_options():
         class_unique = class_sample["class"].n_unique()
         class_counts = class_sample["class"].value_counts().sort("class")
 
-        print(f"Class column analysis:")
+        print("Class column analysis:")
         print(f"  Unique classes: {class_unique}")
-        print(f"  Distribution:")
+        print("  Distribution:")
         print(class_counts)
 
         if class_unique > 1:
@@ -178,7 +177,7 @@ def explore_other_classification_options():
     except Exception as e:
         print(f"Error analyzing class column: {e}")
 
-    print(f"\nOption 2: Create synthetic targets from sensor patterns...")
+    print("\nOption 2: Create synthetic targets from sensor patterns...")
 
     try:
         # Sample some numeric features to create synthetic targets
@@ -197,9 +196,9 @@ def explore_other_classification_options():
                     q25, q50, q75 = values.quantile([0.25, 0.5, 0.75]).to_list()
                     print(f"  {col}: Q25={q25:.2f}, Q50={q50:.2f}, Q75={q75:.2f}")
 
-                    # Could create 3 classes: Low, Medium, High
                     print(
-                        f"    Could create classes: Low<{q25:.2f}, Med={q25:.2f}-{q75:.2f}, High>{q75:.2f}"
+                        f"    Could create classes: Low<{q25:.2f}, "
+                        f"Med={q25:.2f}-{q75:.2f}, High>{q75:.2f}"
                     )
 
         print("\n✅ Synthetic classification approach is viable!")
@@ -207,7 +206,7 @@ def explore_other_classification_options():
     except Exception as e:
         print(f"Error analyzing features: {e}")
 
-    print(f"\nOption 3: Well-based classification...")
+    print("\nOption 3: Well-based classification...")
 
     try:
         # Use well names as classes
@@ -217,9 +216,9 @@ def explore_other_classification_options():
             well_sample["well_name"].value_counts().sort("count", descending=True)
         )
 
-        print(f"Well-based classification:")
+        print("Well-based classification:")
         print(f"  Unique wells: {unique_wells}")
-        print(f"  Top wells by frequency:")
+        print("  Top wells by frequency:")
         print(well_counts.head(10))
 
         if unique_wells > 1:
@@ -277,7 +276,7 @@ def main():
     explore_other_classification_options()
     recommend_solutions()
 
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("INVESTIGATION COMPLETE")
     print("=" * 60)
     print("This analysis should reveal why your state column is invariant")

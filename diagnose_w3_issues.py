@@ -1,9 +1,10 @@
 """Diagnose W3 training issues: slow speed and NaN loss."""
 
 import time
-import torch
+
 import polars as pol
-import numpy as np
+import torch
+
 from duet.models import PatchTSTNan
 
 
@@ -83,7 +84,7 @@ def test_sequence_creation(df, numeric_cols):
     # Analyze sample characteristics
     if samples:
         sample = samples[0]
-        print(f"\nSample analysis:")
+        print("\nSample analysis:")
         print(f"  x_num shape: {sample['x_num'].shape}")
         print(f"  x_cat shape: {sample['x_cat'].shape}")
         print(f"  y value: {sample['y']}")
@@ -91,9 +92,8 @@ def test_sequence_creation(df, numeric_cols):
             f"  x_num range: [{sample['x_num'].min():.3f}, {sample['x_num'].max():.3f}]"
         )
         print(f"  x_num contains NaN: {torch.isnan(sample['x_num']).any()}")
-        print(
-            f"  x_num NaN percentage: {torch.isnan(sample['x_num']).float().mean() * 100:.1f}%"
-        )
+        nan_pct = torch.isnan(sample["x_num"]).float().mean() * 100
+        print(f"  x_num NaN percentage: {nan_pct:.1f}%")
 
         # Check for suspicious patterns
         if torch.isnan(sample["x_num"]).all():
@@ -127,7 +127,7 @@ def test_model_forward_pass(samples, numeric_cols):
         "y": torch.stack([samples[i % len(samples)]["y"] for i in range(batch_size)]),
     }
 
-    print(f"Test batch shapes:")
+    print("Test batch shapes:")
     print(f"  x_num: {batch['x_num'].shape}")
     print(f"  x_cat: {batch['x_cat'].shape}")
     print(f"  y: {batch['y'].shape}")
@@ -146,9 +146,8 @@ def test_model_forward_pass(samples, numeric_cols):
         task="classification",
     )
 
-    print(
-        f"\nModel parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
-    )
+    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\nModel parameters: {params:,}")
 
     # Test forward pass
     print("\nTesting forward pass...")
@@ -179,7 +178,8 @@ def test_model_forward_pass(samples, numeric_cols):
             # Check for suspicious patterns
             if acc.item() == 1.0 and len(torch.unique(batch["y"])) > 1:
                 print(
-                    "⚠️  WARNING: Perfect accuracy on diverse labels - possible data leakage!"
+                    "⚠️  WARNING: Perfect accuracy on diverse labels - "
+                    "possible data leakage!"
                 )
 
             if torch.isnan(loss):
@@ -209,7 +209,7 @@ def estimate_training_time(dataset_size, batch_size):
         "Target": 0.1,  # 0.1 second per batch
     }
 
-    print(f"\nTime estimates per epoch:")
+    print("\nTime estimates per epoch:")
     for scenario, time_per_batch in time_per_batch_estimates.items():
         total_time = num_batches * time_per_batch
         hours = total_time / 3600
