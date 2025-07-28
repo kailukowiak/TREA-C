@@ -530,13 +530,25 @@ def manual_validation(model, data_module, trainer):
     # Get the validation dataloader
     val_dataloader = data_module.val_dataloader()
 
+    # Determine the number of batches to use for validation
+    num_val_batches = trainer.limit_val_batches
+    if isinstance(num_val_batches, float):
+        num_val_batches = int(num_val_batches * len(val_dataloader))
+    if num_val_batches == 0:
+        num_val_batches = len(val_dataloader)
+
+    print(f"Running manual validation on {num_val_batches} batches...")
+
     all_preds = []
     all_labels = []
     total_loss = 0
     loss_fn = torch.nn.CrossEntropyLoss()
 
     with torch.no_grad():
-        for batch in val_dataloader:
+        for i, batch in enumerate(val_dataloader):
+            if i >= num_val_batches:
+                break
+
             # Move batch to the same device as the model
             x_num = batch["x_num"].to(device)
             x_cat = batch["x_cat"].to(device)
@@ -564,7 +576,7 @@ def manual_validation(model, data_module, trainer):
     from sklearn.metrics import accuracy_score
 
     manual_accuracy = accuracy_score(all_labels, all_preds)
-    manual_loss = total_loss / len(val_dataloader)
+    manual_loss = total_loss / num_val_batches
 
     # Get the final validation metrics from the trainer
     trainer_val_acc = trainer.callback_metrics.get("val_acc", "N/A")
