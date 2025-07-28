@@ -1,7 +1,7 @@
-"""Ultra-fast PatchTSTNan training with extreme patch sizes for fine-grained data.
+"""Ultra-fast PatchTSTNan training with in-memory data processing.
 
-For very fine-grained data (every 1-15 seconds), we can use much larger patches
-since consecutive data points are highly correlated.
+Optimized for fine-grained temporal data using pre-loaded datasets for maximum
+training speed with larger patch sizes.
 """
 
 import numpy as np
@@ -9,7 +9,7 @@ import polars as pol
 import pytorch_lightning as pl
 import torch
 
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
@@ -17,11 +17,10 @@ from torch.utils.data import DataLoader, Dataset
 from duet.models import PatchTSTNan
 
 
-class W3StreamingDataset(Dataset):
+class W3InMemoryDataset(Dataset):
     """
     Efficient dataset that uses pre-loaded and pre-processed data from memory.
-    The 'streaming' name is kept for compatibility, but it now functions as an
-    in-memory dataset.
+    All data is loaded upfront and processed in-memory for maximum speed.
     """
 
     def __init__(
@@ -36,7 +35,7 @@ class W3StreamingDataset(Dataset):
         self.seq_len = sequence_length
         self.max_sequences_per_well = max_sequences_per_well
 
-        print("Pre-computing sequence indices from in-memory data...")
+        print("Computing sequence indices from loaded data...")
         self.sequence_indices = []
         total_sequences = 0
         for well_name, well_data in self.well_data_store.items():
@@ -44,8 +43,6 @@ class W3StreamingDataset(Dataset):
             if count >= sequence_length + 1:  # Need at least seq_len + 1 for target
                 # Calculate possible sequences for this well
                 possible_sequences = count - sequence_length
-                # Limit sequences per well to prevent memory issues
-                _actual_sequences = min(possible_sequences, self.max_sequences_per_well)
 
                 # Create indices for this well (step size to sample evenly)
                 if possible_sequences > self.max_sequences_per_well:
@@ -69,7 +66,7 @@ class W3StreamingDataset(Dataset):
     def __getitem__(self, idx):
         well_name, start_idx = self.sequence_indices[idx]
 
-        # Load well data (from memory, very fast)
+        # Load well data from in-memory store
         well_data = self.well_data_store[well_name]
 
         if start_idx + self.seq_len >= len(well_data):
@@ -111,7 +108,7 @@ class W3DataModule(pl.LightningDataModule):
         self.train_well_data_store = None
         self.val_well_data_store = None
 
-    def setup(self, stage=None):
+    def setup(self, stage=None):  # stage parameter required by Lightning interface
         print("Loading and preprocessing data in memory...")
 
         # Load full datasets into memory
@@ -173,14 +170,14 @@ class W3DataModule(pl.LightningDataModule):
         print(f"Validation wells: {len(self.val_well_data_store)}")
 
         # --- Create Datasets ---
-        self.train_dataset = W3StreamingDataset(
+        self.train_dataset = W3InMemoryDataset(
             well_data_store=self.train_well_data_store,
             numeric_cols=self.metadata["numeric_cols"],
             sequence_length=self.sequence_length,
             max_sequences_per_well=50000,
         )
 
-        self.val_dataset = W3StreamingDataset(
+        self.val_dataset = W3InMemoryDataset(
             well_data_store=self.val_well_data_store,
             numeric_cols=self.metadata["numeric_cols"],
             sequence_length=self.sequence_length,
@@ -261,21 +258,21 @@ def extract_dataset_metadata():
 def main():
     print("=" * 60)
     print("ULTRA-FAST PatchTSTNan Training")
-    print("Optimized for fine-grained temporal data")
+    print("In-memory processing for maximum training speed")
     print("=" * 60)
 
     # Phase 1: Extract metadata efficiently
     metadata = extract_dataset_metadata()
 
-    # Using curated train/test split with streaming for FULL datasets
+    # Using curated train/test split with in-memory processing
     print("\n" + "=" * 60)
-    print("USING FULL DATASET WITH STREAMING")
+    print("USING FULL DATASET WITH IN-MEMORY PROCESSING")
     print("=" * 60)
-    print("✓ Training data: FULL data/W3/train.parquet (streaming)")
-    print("✓ Test data: FULL data/W3/test.parquet (streaming)")
-    print("✓ Efficient LRU caching (max 3 wells in memory)")
-    print("✓ No upfront data loading - sequences generated on-demand")
-    print("✓ This enables training on the complete 66M+ row dataset")
+    print("✓ Training data: FULL data/W3/train.parquet (loaded into memory)")
+    print("✓ Test data: FULL data/W3/test.parquet (loaded into memory)")
+    print("✓ Pre-computed sequence indices for fast access")
+    print("✓ StandardScaler fitted on training data only")
+    print("✓ Efficient batch generation from pre-processed data")
 
     # Phase 1: Scaled configuration for maximum GPU utilization (target: 8-15GB)
     sequence_length = 1024  # Longer sequences for more data per sample
@@ -295,9 +292,9 @@ def main():
     print("  Target GPU usage: 8-15GB (vs previous 0.57GB)")
     print("  Expected speedup: 10-20x through GPU utilization")
 
-    # Use streaming datasets for full data training
+    # Create data module with in-memory processing
     print("\n" + "=" * 60)
-    print("CREATING FULL DATASET STREAMING MODULE")
+    print("CREATING IN-MEMORY DATA MODULE")
     print("=" * 60)
 
     # Create data module with curated train/test split
@@ -349,10 +346,20 @@ def main():
 
     # Add early stopping to prevent overfitting
     early_stopping_callback = EarlyStopping(
-        monitor="val_loss",  # Metric to monitor
-        patience=3,  # Number of epochs with no improvement to wait
-        verbose=True,  # Print a message when stopping
-        mode="min",  # Stop when the metric stops decreasing
+        monitor="val_loss",
+        patience=3,
+        verbose=True,
+        mode="min",
+    )
+
+    # Add model checkpoint to save the best model
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",
+        dirpath="checkpoints/",
+        filename="patchtstnan-w3-{epoch:02d}-{val_loss:.2f}",
+        save_top_k=1,
+        mode="min",
+        save_last=True,
     )
 
     trainer = pl.Trainer(
@@ -362,7 +369,7 @@ def main():
         precision="16-mixed",  # Mixed precision for speed and memory efficiency
         log_every_n_steps=10,  # More frequent logging for monitoring
         logger=logger,
-        callbacks=[early_stopping_callback],  # Add the callback here
+        callbacks=[early_stopping_callback, checkpoint_callback],
         gradient_clip_val=1.0,  # Gradient clipping for stability
         # Production settings for larger training
         enable_checkpointing=True,  # Checkpointing for longer runs
@@ -383,7 +390,7 @@ def main():
     print("STARTING ULTRA-FAST TRAINING")
     print("=" * 60)
     print(f"GPU Memory before training: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
-    print("Dataset will show actual batch counts after loading...")
+    print("Starting training with pre-loaded data...")
 
     import time
 
@@ -410,8 +417,7 @@ def main():
 
 def manual_validation(model, data_module, trainer):
     """
-    Manually calculates validation metrics to verify the results and check
-    for potential data leakage.
+    Manually calculates validation metrics to verify training results.
     """
     print("\n" + "=" * 60)
     print("STARTING MANUAL VALIDATION")
