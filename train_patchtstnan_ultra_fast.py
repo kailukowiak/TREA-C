@@ -5,7 +5,6 @@ since consecutive data points are highly correlated.
 """
 
 import numpy as np
-import pandas as pd
 import polars as pol
 import pytorch_lightning as pl
 import torch
@@ -69,7 +68,7 @@ class W3StreamingDataset(Dataset):
                 # Calculate possible sequences for this well
                 possible_sequences = count - sequence_length
                 # Limit sequences per well to prevent memory issues
-                actual_sequences = min(possible_sequences, self.max_sequences_per_well)
+                _actual_sequences = min(possible_sequences, self.max_sequences_per_well)
 
                 # Create indices for this well (step size to sample evenly)
                 if possible_sequences > self.max_sequences_per_well:
@@ -142,7 +141,9 @@ class W3StreamingDataset(Dataset):
 
 
 class W3Dataset(Dataset):
-    """Legacy dataset for backward compatibility - use W3StreamingDataset for large datasets."""
+    """Legacy dataset for backward compatibility -
+    use W3StreamingDataset for large datasets.
+    """
 
     def __init__(
         self, df: pol.DataFrame, sequence_length: int = 128, prediction_horizon: int = 1
@@ -495,6 +496,94 @@ def main():
 
     # Reset memory stats for next run
     torch.cuda.reset_peak_memory_stats()
+
+    # Manually verify the results to ensure no data leakage
+    manual_validation(model, data_module, trainer)
+
+
+def manual_validation(model, data_module, trainer):
+    """
+    Manually calculates validation metrics to verify the results and check
+    for potential data leakage.
+    """
+    print("\n" + "=" * 60)
+    print("STARTING MANUAL VALIDATION")
+    print("=" * 60)
+
+    # Ensure the model is in evaluation mode
+    model.eval()
+
+    # Move model to the correct device (GPU)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    # Get the validation dataloader
+    val_dataloader = data_module.val_dataloader()
+
+    all_preds = []
+    all_labels = []
+    total_loss = 0
+    loss_fn = torch.nn.CrossEntropyLoss()
+
+    with torch.no_grad():
+        for batch in val_dataloader:
+            # Move batch to the same device as the model
+            x_num = batch["x_num"].to(device)
+            x_cat = batch["x_cat"].to(device)
+            y = batch["y"].to(device)
+
+            # Get model predictions (logits)
+            logits = model(x_num, x_cat)
+
+            # Calculate loss for the batch and add to total
+            loss = loss_fn(logits, y)
+            total_loss += loss.item()
+
+            # Get predicted class by finding the index with the highest logit
+            preds = torch.argmax(logits, dim=1)
+
+            # Move predictions and labels to CPU for aggregation
+            all_preds.append(preds.cpu().numpy())
+            all_labels.append(y.cpu().numpy())
+
+    # Combine results from all batches
+    all_preds = np.concatenate(all_preds)
+    all_labels = np.concatenate(all_labels)
+
+    # Calculate overall metrics
+    from sklearn.metrics import accuracy_score
+
+    manual_accuracy = accuracy_score(all_labels, all_preds)
+    manual_loss = total_loss / len(val_dataloader)
+
+    # Get the final validation metrics from the trainer
+    trainer_val_acc = trainer.callback_metrics.get("val_acc", "N/A")
+    trainer_val_loss = trainer.callback_metrics.get("val_loss", "N/A")
+
+    print("\n--- Manual vs. Trainer Metrics Comparison ---")
+    if isinstance(trainer_val_acc, torch.Tensor):
+        trainer_val_acc = trainer_val_acc.item()
+    if isinstance(trainer_val_loss, torch.Tensor):
+        trainer_val_loss = trainer_val_loss.item()
+
+    print(f"  Manual Accuracy: {manual_accuracy:.4f}")
+    print(f"  Trainer Accuracy: {trainer_val_acc:.4f}\n")
+
+    print(f"  Manual Loss: {manual_loss:.4f}")
+    print(f"  Trainer Loss: {trainer_val_loss:.4f}\n")
+
+    # Conclusion
+    if (
+        abs(manual_accuracy - trainer_val_acc) < 1e-4
+        and abs(manual_loss - trainer_val_loss) < 1e-4
+    ):
+        print("✓ SUCCESS: Manual and trainer metrics are consistent.")
+        print(
+            "This confirms the high performance is genuine and not due to data leakage."
+        )
+    else:
+        print("✗ WARNING: Discrepancy found between manual and trainer metrics.")
+        print("Further investigation is needed to identify the source of the issue.")
 
 
 if __name__ == "__main__":

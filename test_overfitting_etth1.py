@@ -161,9 +161,9 @@ def test_overfitting_on_etth1():
         lr=5e-4,  # High learning rate
         task="classification",
     )
-    print(
-        f"Model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
-    )
+
+    model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Model parameters: {model_params:,}")
 
     # Create trainer with "ultra-fast" settings
     print(f"\nStarting training for {MAX_EPOCHS} epochs...")
