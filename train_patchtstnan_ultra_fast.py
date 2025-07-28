@@ -11,6 +11,7 @@ import torch
 
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
 from duet.models import PatchTSTNan
@@ -18,50 +19,24 @@ from duet.models import PatchTSTNan
 
 class W3StreamingDataset(Dataset):
     """
-    Efficient dataset that pre-loads all requested well data into memory to
-    avoid slow, repetitive file reads. This is much faster for training but
-    requires more RAM. The 'streaming' name is kept for compatibility but
-    it now functions as an in-memory dataset.
+    Efficient dataset that uses pre-loaded and pre-processed data from memory.
+    The 'streaming' name is kept for compatibility, but it now functions as an
+    in-memory dataset.
     """
 
     def __init__(
         self,
-        parquet_path: str,
-        well_names: list,
+        well_data_store: dict,
         numeric_cols: list,
-        state_to_label: dict,
         sequence_length: int = 128,
-        max_sequences_per_well: int = 10000,  # Limit sequences per well for memory
+        max_sequences_per_well: int = 10000,
     ):
-        self.parquet_path = parquet_path
-        self.well_names = well_names
+        self.well_data_store = well_data_store
         self.numeric_cols = numeric_cols
-        self.state_to_label = state_to_label
         self.seq_len = sequence_length
         self.max_sequences_per_well = max_sequences_per_well
 
-        print(f"Setting up in-memory dataset for {len(well_names)} wells...")
-        print("Pre-loading all well data... This may take a moment.")
-
-        # Load all data for the specified wells at once for maximum performance
-        df_lazy = pol.scan_parquet(self.parquet_path)
-        all_well_data = (
-            df_lazy.filter(pol.col("well_name").is_in(self.well_names))
-            .filter(pol.col("well_name").str.contains("WELL"))
-            .filter(pol.col("class").is_not_null())
-            .drop("state")
-            .with_columns([pol.col("class").cast(pol.Utf8)])
-            .with_columns([pol.col("class").replace_strict(self.state_to_label)])
-            .collect()
-        )
-
-        # Store pandas dataframes in a dictionary for fast lookups
-        self.well_data_store = {
-            name: df.to_pandas() for name, df in all_well_data.group_by("well_name")
-        }
-        print("All well data is now loaded into memory.")
-
-        # Pre-compute sequence indices from the in-memory data
+        print("Pre-computing sequence indices from in-memory data...")
         self.sequence_indices = []
         total_sequences = 0
         for well_name, well_data in self.well_data_store.items():
@@ -86,11 +61,7 @@ class W3StreamingDataset(Dataset):
 
                 total_sequences += len(starts)
 
-        print(f"Created {total_sequences} sequence indices (from in-memory data)")
-
-    def _load_well_data(self, well_name):
-        """Retrieves pre-loaded well data from the in-memory store."""
-        return self.well_data_store[well_name]
+        print(f"Created {total_sequences} sequence indices.")
 
     def __len__(self):
         return len(self.sequence_indices)
@@ -99,7 +70,7 @@ class W3StreamingDataset(Dataset):
         well_name, start_idx = self.sequence_indices[idx]
 
         # Load well data (from memory, very fast)
-        well_data = self._load_well_data(well_name)
+        well_data = self.well_data_store[well_name]
 
         if start_idx + self.seq_len >= len(well_data):
             # Fallback to last valid sequence
@@ -112,89 +83,12 @@ class W3StreamingDataset(Dataset):
         sequence_data = well_data.iloc[start_idx:end_idx]
         target_state = well_data.iloc[target_idx]["class"]
 
-        # Extract numeric features
+        # Extract numeric features (already scaled)
         numeric_values = sequence_data[self.numeric_cols].values
 
-        # Handle NaN/inf values efficiently
-        has_nan = np.any(np.isnan(numeric_values)) or np.any(np.isinf(numeric_values))
-        if has_nan:
-            numeric_values = np.nan_to_num(
-                numeric_values, nan=0.0, posinf=0.0, neginf=0.0
-            )
-
-        # Fast normalization (per-sequence)
-        numeric_values_norm = np.zeros_like(numeric_values)
-        for col_idx in range(numeric_values.shape[1]):
-            col_data = numeric_values[:, col_idx]
-            mean_val = np.mean(col_data)
-            std_val = np.std(col_data)
-            if std_val > 1e-8:
-                normalized = (col_data - mean_val) / std_val
-                normalized = np.clip(normalized, -3, 3)
-                numeric_values_norm[:, col_idx] = normalized
-            else:
-                numeric_values_norm[:, col_idx] = 0.0
-
-        x_num = torch.tensor(numeric_values_norm, dtype=torch.float32).T
+        x_num = torch.tensor(numeric_values, dtype=torch.float32).T
         x_cat = torch.empty((0, self.seq_len), dtype=torch.long)
         y = torch.tensor(target_state, dtype=torch.long)
-
-        return {"x_num": x_num, "x_cat": x_cat, "y": y}
-
-
-class W3Dataset(Dataset):
-    """Legacy dataset for backward compatibility -
-    use W3StreamingDataset for large datasets.
-    """
-
-    def __init__(
-        self, df: pol.DataFrame, sequence_length: int = 128, prediction_horizon: int = 1
-    ):
-        self.df = df
-        self.seq_len = sequence_length
-        self.pred_horizon = prediction_horizon
-
-        # Identify numeric and categorical columns
-        self.numeric_cols = [
-            col for col in df.columns if col not in ["state", "well_name"]
-        ]
-        self.categorical_cols = []  # No categorical features, state is now the target
-
-        # Convert to pandas for easier indexing
-        self.data = df.to_pandas()
-
-        # Group by well_name to create sequences
-        self.sequences = []
-        for well_name, group in self.data.groupby("well_name"):
-            if len(group) >= self.seq_len + self.pred_horizon:
-                for i in range(len(group) - self.seq_len - self.pred_horizon + 1):
-                    self.sequences.append((well_name, i, i + self.seq_len))
-
-    def __len__(self):
-        return len(self.sequences)
-
-    def __getitem__(self, idx):
-        well_name, start_idx, end_idx = self.sequences[idx]
-        well_data = self.data[self.data["well_name"] == well_name].iloc[
-            start_idx:end_idx
-        ]
-
-        # Extract numeric features
-        x_num = torch.tensor(
-            well_data[self.numeric_cols].values, dtype=torch.float32
-        ).T  # [C_num, T]
-
-        # No categorical features
-        x_cat = torch.empty((0, self.seq_len), dtype=torch.long)
-
-        # Target is the class at the end of sequence
-        target_data = self.data[self.data["well_name"] == well_name].iloc[
-            end_idx : end_idx + self.pred_horizon
-        ]
-        y = torch.tensor(
-            target_data["class"].values[0] if len(target_data) > 0 else 0,
-            dtype=torch.long,
-        )
 
         return {"x_num": x_num, "x_cat": x_cat, "y": y}
 
@@ -204,90 +98,94 @@ class W3DataModule(pl.LightningDataModule):
         self,
         train_parquet_path: str = None,
         test_parquet_path: str = None,
-        train_df: pol.DataFrame = None,
         metadata: dict = None,
         batch_size: int = 256,
         sequence_length: int = 128,
-        use_curated_split: bool = True,
     ):
         super().__init__()
         self.train_parquet_path = train_parquet_path
         self.test_parquet_path = test_parquet_path
-        self.train_df = train_df
         self.metadata = metadata
         self.batch_size = batch_size
         self.sequence_length = sequence_length
-        self.use_curated_split = use_curated_split
+        self.train_well_data_store = None
+        self.val_well_data_store = None
 
     def setup(self, stage=None):
-        if (
-            self.use_curated_split
-            and self.train_parquet_path
-            and self.test_parquet_path
-            and self.metadata
-        ):
-            # Use curated train/test split for proper evaluation
-            print("Setting up curated train/test datasets...")
+        print("Loading and preprocessing data in memory...")
 
-            # Get all wells from training data (filter for real wells)
-            df_lazy = pol.scan_parquet(self.train_parquet_path)
-            train_wells = (
-                df_lazy.select("well_name")
-                .filter(pol.col("well_name").str.contains("WELL"))  # Only real wells
-                .unique()
-                .collect()["well_name"]
-                .to_list()
+        # Load full datasets into memory
+        train_df = pol.read_parquet(self.train_parquet_path)
+        test_df = pol.read_parquet(self.test_parquet_path)
+
+        # --- Preprocessing ---
+        state_to_label = self.metadata["state_to_label"]
+
+        def preprocess(df):
+            return (
+                df.filter(pol.col("well_name").str.contains("WELL"))
+                .filter(pol.col("class").is_not_null())
+                .drop("state")
+                .with_columns(
+                    pol.col("class").cast(pol.Utf8).replace_strict(state_to_label)
+                )
             )
 
-            # Get all wells from test data (filter for real wells)
-            test_df_lazy = pol.scan_parquet(self.test_parquet_path)
-            test_wells = (
-                test_df_lazy.select("well_name")
-                .filter(pol.col("well_name").str.contains("WELL"))  # Only real wells
-                .unique()
-                .collect()["well_name"]
-                .to_list()
-            )
+        train_df = preprocess(train_df)
+        test_df = preprocess(test_df)
 
-            print(f"Training wells: {len(train_wells)} real wells from train.parquet")
-            print(f"Validation wells: {len(test_wells)} real wells from test.parquet")
+        # Convert to pandas for scikit-learn compatibility
+        train_pdf = train_df.to_pandas()
+        test_pdf = test_df.to_pandas()
 
-            # Create streaming training dataset from FULL train.parquet
-            self.train_dataset = W3StreamingDataset(
-                parquet_path=self.train_parquet_path,
-                well_names=train_wells,
-                numeric_cols=self.metadata["numeric_cols"],
-                state_to_label=self.metadata["state_to_label"],
-                sequence_length=self.sequence_length,
-                max_sequences_per_well=50000,  # Much larger per well for full dataset
-            )
+        numeric_cols = self.metadata["numeric_cols"]
 
-            # Create streaming validation dataset from FULL test.parquet
-            self.val_dataset = W3StreamingDataset(
-                parquet_path=self.test_parquet_path,
-                well_names=test_wells,
-                numeric_cols=self.metadata["numeric_cols"],
-                state_to_label=self.metadata["state_to_label"],
-                sequence_length=self.sequence_length,
-                max_sequences_per_well=10000,  # Reasonable validation size
-            )
+        # Handle NaN/inf values before scaling
+        train_pdf[numeric_cols] = np.nan_to_num(
+            train_pdf[numeric_cols], nan=0.0, posinf=0.0, neginf=0.0
+        )
+        test_pdf[numeric_cols] = np.nan_to_num(
+            test_pdf[numeric_cols], nan=0.0, posinf=0.0, neginf=0.0
+        )
 
-        else:
-            # Legacy approach with DataFrame
-            print("Setting up legacy datasets...")
-            wells = self.train_df["well_name"].unique().to_list()
-            n_train_wells = int(0.8 * len(wells))
+        # --- Scaling (Fit on train only, transform both) ---
+        print("Fitting StandardScaler on training data...")
+        scaler = StandardScaler()
+        scaler.fit(train_pdf[numeric_cols])
 
-            train_wells = wells[:n_train_wells]
-            val_wells = wells[n_train_wells:]
+        print("Applying scaler to train and test data...")
+        train_pdf[numeric_cols] = scaler.transform(train_pdf[numeric_cols])
+        test_pdf[numeric_cols] = scaler.transform(test_pdf[numeric_cols])
 
-            train_df = self.train_df.filter(pol.col("well_name").is_in(train_wells))
-            val_df = self.train_df.filter(pol.col("well_name").is_in(val_wells))
+        # Clip values to prevent outliers from dominating
+        train_pdf[numeric_cols] = np.clip(train_pdf[numeric_cols], -3, 3)
+        test_pdf[numeric_cols] = np.clip(test_pdf[numeric_cols], -3, 3)
 
-            self.train_dataset = W3Dataset(
-                train_df, sequence_length=self.sequence_length
-            )
-            self.val_dataset = W3Dataset(val_df, sequence_length=self.sequence_length)
+        # --- Create Data Stores ---
+        self.train_well_data_store = {
+            name: df for name, df in train_pdf.groupby("well_name")
+        }
+        self.val_well_data_store = {
+            name: df for name, df in test_pdf.groupby("well_name")
+        }
+
+        print(f"Training wells: {len(self.train_well_data_store)}")
+        print(f"Validation wells: {len(self.val_well_data_store)}")
+
+        # --- Create Datasets ---
+        self.train_dataset = W3StreamingDataset(
+            well_data_store=self.train_well_data_store,
+            numeric_cols=self.metadata["numeric_cols"],
+            sequence_length=self.sequence_length,
+            max_sequences_per_well=50000,
+        )
+
+        self.val_dataset = W3StreamingDataset(
+            well_data_store=self.val_well_data_store,
+            numeric_cols=self.metadata["numeric_cols"],
+            sequence_length=self.sequence_length,
+            max_sequences_per_well=10000,
+        )
 
     def train_dataloader(self):
         return DataLoader(
@@ -412,7 +310,6 @@ def main():
         metadata=metadata,
         batch_size=batch_size,
         sequence_length=sequence_length,
-        use_curated_split=True,  # Use proper train/test split
     )
 
     # Create larger model for maximum GPU utilization and capacity
