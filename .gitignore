@@ -19,3 +19,4 @@ duet/data/*
 checkpoints/
 data/datasets/.env
 tb_logs/
+datasets/
