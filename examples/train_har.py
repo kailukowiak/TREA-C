@@ -85,13 +85,13 @@ def main():
     print("This is real sensor data from smartphones!")
     trainer.fit(model, dm)
 
-    # Test final performance
-    print("\nEvaluating on test set...")
-    results = trainer.test(model, dm)
+    # Evaluate final performance on validation set
+    print("\nEvaluating final performance...")
+    results = trainer.validate(model, dm)
 
     print("\nTraining complete!")
     print(f"Best model saved to: {checkpoint.best_model_path}")
-    print(f"Test results: {results}")
+    print(f"Final validation results: {results}")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,9 @@ uvx ruff check . ---fix
 DO NOT run the model yourself. The model outputs tqdm progress bars which will blow
 up your context window. Ask me to run it for you if you need to see the output.
 
+DO NOT RUN `uv run python_file.py` because it will overflow your context window with
+tqdm progress bars.
+
 
 ## Architecture 
 

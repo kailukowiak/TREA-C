@@ -1,6 +1,11 @@
-"""Train DualPatchTransformer on NASA Turbofan dataset."""
+"""Train and compare models on NASA Turbofan dataset."""
 
+import time
+
+import pandas as pd
 import pytorch_lightning as pl
+import torch
+import torch.nn as nn
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -8,6 +13,214 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.nasa_turbofan import NASATurbofanDataset
 from duet.models.transformer import DualPatchTransformer
+
+
+class PatchTSTClassifier(pl.LightningModule):
+    """PatchTST adapted for classification."""
+
+    def __init__(
+        self,
+        c_in: int,
+        seq_len: int,
+        num_classes: int,
+        patch_len: int = 16,
+        stride: int = 8,
+        d_model: int = 128,
+        n_head: int = 8,
+        num_layers: int = 3,
+        lr: float = 1e-3,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # Patching
+        self.patch_len = patch_len
+        self.stride = stride
+        self.num_patches = (seq_len - patch_len) // stride + 1
+
+        # Patch embedding
+        self.patch_embedding = nn.Linear(patch_len * c_in, d_model)
+
+        # Positional encoding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.num_patches, d_model))
+
+        # Transformer
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=n_head, batch_first=True, norm_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Classification head
+        self.head = nn.Linear(d_model, num_classes)
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def create_patches(self, x):
+        """Create patches from input tensor."""
+        B, C, T = x.shape
+        patches = []
+
+        for i in range(0, T - self.patch_len + 1, self.stride):
+            patch = x[:, :, i : i + self.patch_len]  # [B, C, patch_len]
+            patch = patch.reshape(B, -1)  # [B, C * patch_len]
+            patches.append(patch)
+
+        patches = torch.stack(patches, dim=1)  # [B, num_patches, C * patch_len]
+        return patches
+
+    def forward(self, x_num, x_cat=None):
+        patches = self.create_patches(x_num)
+
+        # Embed patches
+        x = self.patch_embedding(patches)
+        x = x + self.pos_embedding
+
+        # Transformer
+        x = self.transformer(x)
+
+        # Global average pooling
+        x = x.mean(dim=1)  # [B, d_model]
+
+        # Classification
+        return self.head(x)
+
+    def training_step(self, batch, batch_idx):
+        out = self(batch["x_num"], batch.get("x_cat"))
+        loss = self.loss_fn(out, batch["y"])
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        out = self(batch["x_num"], batch.get("x_cat"))
+        loss = self.loss_fn(out, batch["y"])
+        self.log("val_loss", loss)
+
+        preds = torch.argmax(out, dim=1)
+        acc = (preds == batch["y"]).float().mean()
+        self.log("val_acc", acc)
+
+        return {"val_loss": loss, "preds": preds, "labels": batch["y"]}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+
+
+class CNNClassifier(pl.LightningModule):
+    """1D CNN baseline for time series classification."""
+
+    def __init__(
+        self,
+        c_in: int,
+        seq_len: int,
+        num_classes: int,
+        lr: float = 1e-3,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.feature_extractor = nn.Sequential(
+            nn.Conv1d(c_in, 64, kernel_size=7, padding=3),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(128, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(8),
+        )
+
+        # Calculate output size
+        with torch.no_grad():
+            dummy = torch.zeros(1, c_in, seq_len)
+            out = self.feature_extractor(dummy)
+            flat_size = out.shape[1] * out.shape[2]
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(flat_size, 128),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(128, num_classes),
+        )
+
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, x_num, x_cat=None):
+        x = self.feature_extractor(x_num)
+        return self.classifier(x)
+
+    def training_step(self, batch, batch_idx):
+        out = self(batch["x_num"], batch.get("x_cat"))
+        loss = self.loss_fn(out, batch["y"])
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        out = self(batch["x_num"], batch.get("x_cat"))
+        loss = self.loss_fn(out, batch["y"])
+        self.log("val_loss", loss)
+
+        preds = torch.argmax(out, dim=1)
+        acc = (preds == batch["y"]).float().mean()
+        self.log("val_acc", acc)
+
+        return {"val_loss": loss, "preds": preds, "labels": batch["y"]}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+
+
+def train_model(model, dm, model_name, max_epochs=30):
+    """Train a model and return results."""
+    start_time = time.time()
+
+    # Callbacks
+    checkpoint = ModelCheckpoint(
+        monitor="val_loss",
+        dirpath=f"checkpoints/turbofan_comparison/{model_name}",
+        filename="{epoch:02d}-{val_loss:.3f}",
+        save_top_k=1,
+        mode="min",
+    )
+
+    early_stop = EarlyStopping(monitor="val_loss", patience=5, verbose=True, mode="min")
+
+    # Logger
+    logger = TensorBoardLogger("logs", name=f"turbofan_{model_name}")
+
+    # Trainer
+    trainer = pl.Trainer(
+        max_epochs=max_epochs,
+        callbacks=[checkpoint, early_stop],
+        logger=logger,
+        enable_progress_bar=True,
+        log_every_n_steps=50,
+    )
+
+    print(f"Training {model_name}...")
+    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
+
+    # Train
+    trainer.fit(model, dm)
+
+    # Validate on best model
+    trainer.validate(ckpt_path="best", datamodule=dm)
+
+    # Calculate metrics
+    val_results = trainer.validate(model, dm, verbose=False)
+    val_loss = val_results[0]["val_loss"]
+    val_acc = val_results[0]["val_acc"]
+
+    training_time = time.time() - start_time
+
+    return {
+        "Model": model_name,
+        "Val Accuracy": f"{val_acc:.4f}",
+        "Val Loss": f"{val_loss:.4f}",
+        "Parameters": f"{sum(p.numel() for p in model.parameters()):,}",
+        "Training Time (s)": f"{training_time:.1f}",
+        "Epochs": trainer.current_epoch + 1,
+    }
 
 
 def main():
@@ -102,50 +315,111 @@ def main():
             "cat_cardinalities": train_dataset.cat_cardinalities,
         }
 
-    # Create model
-    model = DualPatchTransformer(
-        C_num=feature_info["n_numeric"],
+    # Get dimensions for models
+    c_in = feature_info["n_numeric"]
+    seq_len = train_dataset[0]["x_num"].shape[1]
+    num_classes = 3
+
+    print("\nDataset info:")
+    print(f"- Numeric features: {c_in}")
+    print(f"- Sequence length: {seq_len}")
+    print(f"- Number of classes: {num_classes}")
+
+    results = []
+    max_epochs = 15
+
+    # 1. Train DuET (our model)
+    print("\n" + "=" * 60)
+    print("Training DuET (Dual-Patch Transformer)...")
+    print("=" * 60)
+
+    duet_model = DualPatchTransformer(
+        C_num=c_in,
         C_cat=feature_info["n_categorical"],
         cat_cardinalities=feature_info["cat_cardinalities"],
-        T=train_dataset[0]["x_num"].shape[1],  # sequence length
-        d_model=128,  # Larger model for complex data
+        T=seq_len,
+        d_model=128,
         n_head=8,
         num_layers=4,
         task="classification",
-        num_classes=3,
+        num_classes=num_classes,
+        lr=1e-3,
     )
 
-    # Callbacks
-    checkpoint = ModelCheckpoint(
-        monitor="val_loss",
-        dirpath="checkpoints/turbofan",
-        filename="duet-{epoch:02d}-{val_loss:.2f}",
-        save_top_k=3,
-        mode="min",
+    duet_results = train_model(duet_model, dm, "DuET", max_epochs=max_epochs)
+    results.append(duet_results)
+
+    # 2. Train PatchTST
+    print("\n" + "=" * 60)
+    print("Training PatchTST...")
+    print("=" * 60)
+
+    patchtst_model = PatchTSTClassifier(
+        c_in=c_in,
+        seq_len=seq_len,
+        num_classes=num_classes,
+        patch_len=16,
+        stride=8,
+        d_model=128,
+        n_head=8,
+        num_layers=3,
+        lr=1e-3,
     )
 
-    early_stop = EarlyStopping(monitor="val_loss", patience=10, mode="min")
+    patchtst_results = train_model(
+        patchtst_model, dm, "PatchTST", max_epochs=max_epochs
+    )
+    results.append(patchtst_results)
 
-    # Logger
-    logger = TensorBoardLogger("logs", name="nasa_turbofan_classification")
+    # 3. Train CNN baseline
+    print("\n" + "=" * 60)
+    print("Training CNN Baseline...")
+    print("=" * 60)
 
-    # Trainer
-    trainer = pl.Trainer(
-        max_epochs=50,
-        accelerator="auto",
-        devices=1,
-        callbacks=[checkpoint, early_stop],
-        logger=logger,
-        gradient_clip_val=1.0,
-        log_every_n_steps=10,
+    cnn_model = CNNClassifier(
+        c_in=c_in,
+        seq_len=seq_len,
+        num_classes=num_classes,
+        lr=1e-3,
     )
 
-    # Train
-    print("\nStarting training...")
-    trainer.fit(model, dm)
+    cnn_results = train_model(cnn_model, dm, "CNN", max_epochs=max_epochs)
+    results.append(cnn_results)
 
-    print("\nTraining complete!")
-    print(f"Best model saved to: {checkpoint.best_model_path}")
+    # Create comparison DataFrame
+    df = pd.DataFrame(results)
+
+    # Display results
+    print("\n" + "=" * 80)
+    print("RESULTS COMPARISON")
+    print("=" * 80)
+    print(df.to_string(index=False))
+
+    # Save to CSV
+    csv_filename = "outputs/turbofan_model_comparison.csv"
+    df.to_csv(csv_filename, index=False)
+    print(f"\nResults saved to: {csv_filename}")
+
+    # Create summary
+    print("\n" + "=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
+
+    best_acc_idx = df["Val Accuracy"].str.replace("%", "").astype(float).idxmax()
+    best_model = df.iloc[best_acc_idx]
+
+    print(f"🏆 Best Model: {best_model['Model']}")
+    print(f"   Accuracy: {best_model['Val Accuracy']}")
+    print(f"   Parameters: {best_model['Parameters']}")
+    print(f"   Training Time: {best_model['Training Time (s)']}s")
+
+    # Parameter efficiency
+    print("\n📊 Parameter Efficiency:")
+    for _, row in df.iterrows():
+        acc = float(row["Val Accuracy"].replace("%", ""))
+        params = int(row["Parameters"].replace(",", ""))
+        efficiency = acc / (params / 1000)  # Accuracy per 1K parameters
+        print(f"   {row['Model']}: {efficiency:.2f} acc/1K params")
 
 
 if __name__ == "__main__":

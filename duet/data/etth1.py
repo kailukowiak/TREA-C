@@ -22,6 +22,9 @@ class ETTh1Dataset(Dataset):
     into 3 classes based on quantiles: Low, Medium, High.
     """
 
+    # Column names for the ETTh1 dataset
+    COLUMN_NAMES = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
+
     def __init__(
         self,
         data_dir: str = "./data/etth1",
@@ -154,7 +157,12 @@ class ETTh1Dataset(Dataset):
             "sequence_length": self.sequence_length,
             "num_classes": self.num_classes,
             "task": self.task,
+            "column_names": self.COLUMN_NAMES.copy(),
         }
+
+    def get_column_names(self) -> list[str]:
+        """Get column names for the dataset."""
+        return self.COLUMN_NAMES.copy()
 
     def __len__(self) -> int:
         return len(self.y)

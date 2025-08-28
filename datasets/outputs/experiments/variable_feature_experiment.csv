@@ -1,0 +1,6 @@
+Model,Accuracy,F1 Score,Val Loss,Training Time (s),Parameters,Epochs,Embedding Stats,Dataset,Numeric Features,Categorical Features,Total Features
+VariableFeature_Small_Dataset,1.0,1.0,0.0,2.6467089653015137,2020996,5,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 15}",Small Dataset,4,1,5
+VariableFeature_Medium_Dataset,1.0,1.0,0.0,2.938934803009033,2020996,5,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 20}",Medium Dataset,8,2,10
+VariableFeature_Large_Dataset,1.0,1.0,0.0,2.6601154804229736,2020996,5,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 25}",Large Dataset,12,3,15
+VariableFeature_Numeric_Only,1.0,1.0,0.0,2.517913579940796,2020996,5,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 25}",Numeric Only,6,0,6
+VariableFeature_With_Categoricals,1.0,1.0,0.0,2.6198644638061523,2020996,5,"{'strategy': 'auto_expanding', 'vocab_size': 1000, 'next_idx': 25}",With Categoricals,5,3,8
