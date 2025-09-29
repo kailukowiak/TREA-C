@@ -175,7 +175,9 @@ class BERTColumnEmbedding(nn.Module):
                     continue
 
                 # Split camelCase using regex
-                camel_tokens = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part)
+                camel_tokens = re.findall(
+                    r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part
+                )
                 if not camel_tokens:
                     camel_tokens = [part]
 
@@ -295,11 +297,12 @@ class FrozenBERTColumnEmbedder(nn.Module):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Cache files
+        model_name = bert_model.replace('/', '_')
         self.embeddings_cache_file = (
-            self.cache_dir / f"bert_embeddings_{bert_model.replace('/', '_')}.pkl"
+            self.cache_dir / f"bert_embeddings_{model_name}.pkl"
         )
         self.metadata_cache_file = (
-            self.cache_dir / f"metadata_{bert_model.replace('/', '_')}.json"
+            self.cache_dir / f"metadata_{model_name}.json"
         )
 
         # Initialize BERT (lazy loading)
@@ -380,7 +383,9 @@ class FrozenBERTColumnEmbedder(nn.Module):
                     continue
 
                 # Split camelCase using regex
-                camel_tokens = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part)
+                camel_tokens = re.findall(
+                    r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part
+                )
                 if not camel_tokens:
                     camel_tokens = [part]
 
@@ -399,10 +404,13 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         # Check if already cached
         cache_key = (
-            f"{column_name}_{self.tokenization_strategy}_{self.aggregation_strategy}"
+            f"{column_name}_{self.tokenization_strategy}_"
+            f"{self.aggregation_strategy}"
         )
         if cache_key in self.embedding_cache:
-            return torch.tensor(self.embedding_cache[cache_key], device=self.device)
+            return torch.tensor(
+                self.embedding_cache[cache_key], device=self.device
+            )
 
         # Process column name
         processed_text = self._process_column_name(column_name)
@@ -457,7 +465,8 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         for col in column_names:
             cache_key = (
-                f"{col}_{self.tokenization_strategy}_{self.aggregation_strategy}"
+                f"{col}_{self.tokenization_strategy}_"
+                f"{self.aggregation_strategy}"
             )
 
             if cache_key in self.embedding_cache:
@@ -522,7 +531,11 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
 
 class AutoExpandingEmbedder(nn.Module):
-    """Auto-expanding embedding layer that grows vocabulary as new columns are encountered."""
+    """Auto-expanding embedding layer that grows vocabulary dynamically.
+
+    This embedding layer automatically expands its vocabulary when new column names
+    are encountered during multi-dataset training.
+    """
 
     def __init__(
         self,
@@ -596,13 +609,16 @@ class AutoExpandingEmbedder(nn.Module):
         # Get indices for current columns
         self.current_indices = [self.column_to_idx[col] for col in column_names]
         print(
-            f"Set {len(column_names)} columns (vocabulary size: {self.embedding.num_embeddings})"
+            f"Set {len(column_names)} columns "
+            f"(vocabulary size: {self.embedding.num_embeddings})"
         )
 
     def get_embeddings(self) -> torch.Tensor:
         """Get embeddings for current columns."""
         indices = torch.tensor(
-            self.current_indices, dtype=torch.long, device=self.embedding.weight.device
+            self.current_indices,
+            dtype=torch.long,
+            device=self.embedding.weight.device,
         )
         embs = self.embedding(indices)  # [num_columns, embedding_dim]
         return self.projection(embs)  # [num_columns, target_dim]
@@ -691,13 +707,17 @@ ETTH1_COLUMNS = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
 if __name__ == "__main__":
     # Test simple embeddings
     print("Testing Simple Column Embeddings...")
-    simple_emb = create_column_embedding(ETTH1_COLUMNS, target_dim=1, strategy="simple")
+    simple_emb = create_column_embedding(
+        ETTH1_COLUMNS, target_dim=1, strategy="simple"
+    )
     embeddings = simple_emb(32, 96)
     print(f"Simple embeddings shape: {embeddings.shape}")
 
     # Test BERT embeddings
     print("\nTesting BERT Column Embeddings...")
-    bert_emb = create_column_embedding(ETTH1_COLUMNS, target_dim=1, strategy="bert")
+    bert_emb = create_column_embedding(
+        ETTH1_COLUMNS, target_dim=1, strategy="bert"
+    )
     embeddings = bert_emb(32, 96)
     print(f"BERT embeddings shape: {embeddings.shape}")
 

@@ -13,7 +13,8 @@ The model supports three configurable modes:
 Key features:
 - Unified feature space with feature masking for variable schemas
 - Multiple column embedding strategies (BERT, auto-expanding, simple)
-- Self-supervised pretraining with masked patch prediction, temporal order, and contrastive learning
+- Self-supervised pretraining with masked patch prediction, temporal order,
+  and contrastive learning
 - Dual-patch NaN handling with value + mask channels
 - Support for both numeric and categorical features
 - Compatible with both classification and regression tasks
@@ -155,8 +156,9 @@ class MultiDatasetModel(pl.LightningModule):
                 categorical_cardinalities = [100] * max_categorical_features
             elif len(categorical_cardinalities) != max_categorical_features:
                 raise ValueError(
-                    f"categorical_cardinalities length ({len(categorical_cardinalities)}) "
-                    f"must match max_categorical_features ({max_categorical_features})"
+                    f"categorical_cardinalities length "
+                    f"({len(categorical_cardinalities)}) must match "
+                    f"max_categorical_features ({max_categorical_features})"
                 )
 
             self.categorical_embeddings = nn.ModuleList(
@@ -326,7 +328,9 @@ class MultiDatasetModel(pl.LightningModule):
         categorical_features: int = 0,
         column_names: list[str] | None = None,
     ) -> None:
-        """Set the schema for the current dataset (variable_features and pretrain modes).
+        """Set the schema for the current dataset.
+
+        For variable_features and pretrain modes.
 
         Args:
             numeric_features: Number of numeric features in this dataset
@@ -370,7 +374,8 @@ class MultiDatasetModel(pl.LightningModule):
                 )
 
         print(
-            f"Set dataset schema: {numeric_features} numeric + {categorical_features} categorical features"
+            f"Set dataset schema: {numeric_features} numeric + "
+            f"{categorical_features} categorical features"
         )
         if column_names:
             print(f"Column names: {column_names}")
@@ -432,7 +437,9 @@ class MultiDatasetModel(pl.LightningModule):
     def pad_features_to_unified_space(
         self, x_num: torch.Tensor, x_cat: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Pad features to unified space with categorical embeddings (variable_features/pretrain modes).
+        """Pad features to unified space with categorical embeddings.
+
+        For variable_features/pretrain modes.
 
         Args:
             x_num: Numeric features [B, C_num, T]
@@ -611,7 +618,8 @@ class MultiDatasetModel(pl.LightningModule):
             channels_to_cat.append(numeric_col_emb)
 
         # Add categorical channels: [embedding_dims, feature_mask?, column_emb?]
-        # Reshape categorical embeddings from [B, max_categorical_features, embedding_dim, T]
+        # Reshape categorical embeddings from
+        # [B, max_categorical_features, embedding_dim, T]
         # to [B, max_categorical_features * embedding_dim, T]
         x_cat_reshaped = x_cat_embedded.view(
             B, self.max_categorical_features * self.categorical_embedding_dim, T
@@ -693,7 +701,10 @@ class MultiDatasetModel(pl.LightningModule):
         return patches
 
     def get_global_embedding(self, patches: torch.Tensor) -> torch.Tensor:
-        """Get global embedding from patches for contrastive learning (pretrain mode only)."""
+        """Get global embedding from patches for contrastive learning.
+
+        Pretrain mode only.
+        """
         if self.mode != "pretrain":
             raise RuntimeError("get_global_embedding only available in pretrain mode")
 
@@ -916,9 +927,6 @@ class MultiDatasetModel(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """Training step with mode-specific processing."""
-        x_num = batch["x_num"]
-        x_cat = batch.get("x_cat", None)
-        y = batch["y"]
 
         if self.mode == "pretrain":
             return self._training_step_pretrain(batch, batch_idx)
@@ -1100,7 +1108,8 @@ class MultiDatasetModel(pl.LightningModule):
 
         for name, schema in dataset_schemas.items():
             print(
-                f"    {name}: {schema['numeric']} numeric + {schema.get('categorical', 0)} categorical"
+                f"    {name}: {schema['numeric']} numeric + "
+                f"{schema.get('categorical', 0)} categorical"
             )
 
         model = cls(
