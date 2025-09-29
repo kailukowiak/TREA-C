@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.nasa_turbofan import NASATurbofanDataset
-from duet.models.transformer import DualPatchTransformer
+from duet.models.duet_model import DualPatchTransformer
 
 
 class PatchTSTClassifier(pl.LightningModule):

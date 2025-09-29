@@ -19,8 +19,7 @@ from duet.data.downloaders.air_quality import AirQualityDataset
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.data.downloaders.financial_market import FinancialMarketDataset
 from duet.data.downloaders.human_activity import HumanActivityDataset
-from duet.models.pretrain_patch_duet import PretrainPatchDuET
-from duet.models.variable_feature_patch_duet import VariableFeaturePatchDuET
+from duet.models.multi_dataset_model import MultiDatasetModel
 
 
 def get_dataset(dataset_name: str, split: str, sequence_length: int):
@@ -100,20 +99,22 @@ def load_model_from_checkpoint(
 ):
     """Load model from checkpoint."""
     if model_type == "pretrained":
-        model = PretrainPatchDuET.from_pretrained(
+        model = MultiDatasetModel.from_pretrained(
             pretrained_path=checkpoint_path,
             num_classes=dataset.num_classes,
             freeze_encoder=False,
+            mode="pretrain",
         )
     else:
         # Load from scratch model
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         hparams = checkpoint.get("hyper_parameters", {})
 
-        model = VariableFeaturePatchDuET(
+        model = MultiDatasetModel(
             max_numeric_features=dataset.numeric_features,
             max_categorical_features=dataset.categorical_features,
             num_classes=dataset.num_classes,
+            mode="variable_features",
             **{
                 k: v
                 for k, v in hparams.items()
@@ -122,6 +123,7 @@ def load_model_from_checkpoint(
                     "max_numeric_features",
                     "max_categorical_features",
                     "num_classes",
+                    "mode",
                 ]
             },
         )

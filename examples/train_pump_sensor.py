@@ -14,7 +14,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
 from data.downloaders.pump_sensor import PumpSensorDataset
-from duet.models.transformer import DualPatchTransformer
+from duet.models.duet_model import DualPatchTransformer
 
 
 def visualize_pump_data(dataset, num_samples=3):

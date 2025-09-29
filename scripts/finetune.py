@@ -18,8 +18,7 @@ from duet.data.downloaders.air_quality import AirQualityDataset
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.data.downloaders.financial_market import FinancialMarketDataset
 from duet.data.downloaders.human_activity import HumanActivityDataset
-from duet.models.pretrain_patch_duet import PretrainPatchDuET
-from duet.models.variable_feature_patch_duet import VariableFeaturePatchDuET
+from duet.models.multi_dataset_model import MultiDatasetModel
 
 
 def get_dataset(dataset_name: str, split: str, sequence_length: int):
@@ -47,25 +46,26 @@ def get_dataset(dataset_name: str, split: str, sequence_length: int):
 
 def create_pretrained_model(
     pretrained_path: str, num_classes: int, freeze_encoder: bool = True
-) -> PretrainPatchDuET:
+) -> MultiDatasetModel:
     """Load pre-trained model for fine-tuning."""
     print(f"Loading pre-trained model from: {pretrained_path}")
     print(f"Freeze encoder: {freeze_encoder}")
 
-    model = PretrainPatchDuET.from_pretrained(
+    model = MultiDatasetModel.from_pretrained(
         pretrained_path=pretrained_path,
         num_classes=num_classes,
         freeze_encoder=freeze_encoder,
+        mode="pretrain",
     )
 
     return model
 
 
-def create_from_scratch_model(dataset, args) -> VariableFeaturePatchDuET:
+def create_from_scratch_model(dataset, args) -> MultiDatasetModel:
     """Create model to train from scratch for comparison."""
     print("Creating model to train from scratch...")
 
-    model = VariableFeaturePatchDuET(
+    model = MultiDatasetModel(
         max_numeric_features=dataset.numeric_features,
         max_categorical_features=dataset.categorical_features,
         num_classes=dataset.num_classes,
@@ -78,6 +78,7 @@ def create_from_scratch_model(dataset, args) -> VariableFeaturePatchDuET:
         use_feature_masks=True,
         column_embedding_strategy="auto_expanding",
         max_sequence_length=args.sequence_length,
+        mode="variable_features",
     )
 
     # Set dataset schema

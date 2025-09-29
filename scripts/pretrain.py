@@ -19,7 +19,7 @@ from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.data.downloaders.financial_market import FinancialMarketDataset
 from duet.data.downloaders.human_activity import HumanActivityDataset
 from duet.utils.multi_dataset_loader import MultiDatasetDataModule
-from duet.models.pretrain_patch_duet import PretrainPatchDuET
+from duet.models.multi_dataset_model import MultiDatasetModel
 
 
 def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any]]:
@@ -104,7 +104,7 @@ def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any
     return {"train": train_datasets, "val": val_datasets}
 
 
-def create_model(datasets: dict[str, dict[str, any]], args) -> PretrainPatchDuET:
+def create_model(datasets: dict[str, dict[str, any]], args) -> MultiDatasetModel:
     """Create pre-training model with proper schema configuration.
 
     Args:
@@ -112,7 +112,7 @@ def create_model(datasets: dict[str, dict[str, any]], args) -> PretrainPatchDuET
         args: Command line arguments
 
     Returns:
-        Configured PretrainPatchDuET model
+        Configured MultiDatasetModel model
     """
     print("Creating pre-training model...")
 
@@ -174,10 +174,11 @@ def create_model(datasets: dict[str, dict[str, any]], args) -> PretrainPatchDuET
         use_masked_patch = use_temporal_order = use_contrastive = True
 
     # Create model
-    model = PretrainPatchDuET(
+    model = MultiDatasetModel(
         max_numeric_features=max_numeric_features,
         max_categorical_features=max_categorical_features,
         num_classes=max_classes,
+        mode="pretrain",
         # SSL configuration
         ssl_objectives={
             "masked_patch": use_masked_patch,
@@ -423,9 +424,10 @@ def main():
 
     print("\nTo use this pre-trained model for fine-tuning:")
     print(
-        "model = PretrainPatchDuET.from_pretrained(\n"
+        "model = MultiDatasetModel.from_pretrained(\n"
         f"    '{final_checkpoint_path}',\n"
-        "    num_classes=<your_classes>\n"
+        "    num_classes=<your_classes>,\n"
+        "    mode='pretrain'\n"
         ")"
     )
 

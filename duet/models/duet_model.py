@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
-from .column_embeddings import ColumnEmbedding
+from .embeddings import ColumnEmbedding
 
 
 class DualPatchTransformer(pl.LightningModule):

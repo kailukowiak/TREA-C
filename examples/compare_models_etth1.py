@@ -20,7 +20,7 @@ sys.path.append(".")
 
 from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
-from duet.models.transformer import DualPatchTransformer
+from duet.models.duet_model import DualPatchTransformer
 
 
 class HFPatchTSTClassifier(pl.LightningModule):

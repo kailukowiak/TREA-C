@@ -29,8 +29,7 @@ from duet.data.downloaders.air_quality import AirQualityDataset
 from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.data.downloaders.human_activity import HumanActivityDataset
-from duet.models.multi_dataset_patch_duet import MultiDatasetPatchDuET
-from duet.models.variable_feature_patch_duet import VariableFeaturePatchDuET
+from duet.models.multi_dataset_model import MultiDatasetModel
 from duet.utils import get_checkpoint_path, get_output_path
 
 
@@ -415,7 +414,7 @@ def train_baseline_without_pretraining(final_dataset_name, final_dataset_info):
     )
 
     # Create baseline model (no column embeddings)
-    model = MultiDatasetPatchDuET.create_baseline(
+    model = MultiDatasetModel.create_baseline(
         c_in=c_in,
         seq_len=seq_len,
         num_classes=num_classes,
@@ -423,6 +422,7 @@ def train_baseline_without_pretraining(final_dataset_name, final_dataset_info):
         n_head=4,
         num_layers=2,
         lr=1e-3,
+        mode="standard",
     )
 
     print(f"  Columns: {column_names}")
@@ -551,7 +551,7 @@ def multi_dataset_experiment():
 
             # Create model
             if strategy == "none":
-                model = MultiDatasetPatchDuET.create_baseline(
+                model = MultiDatasetModel.create_baseline(
                     c_in=c_in,
                     seq_len=seq_len,
                     num_classes=num_classes,
@@ -559,9 +559,10 @@ def multi_dataset_experiment():
                     n_head=4,
                     num_layers=2,
                     lr=1e-3,
+                    mode="standard",
                 )
             else:
-                model = MultiDatasetPatchDuET.create_for_dataset(
+                model = MultiDatasetModel.create_for_dataset(
                     c_in=c_in,
                     seq_len=seq_len,
                     num_classes=num_classes,
@@ -571,6 +572,7 @@ def multi_dataset_experiment():
                     n_head=4,
                     num_layers=2,
                     lr=1e-3,
+                    mode="standard",
                 )
 
             print(f"  Columns: {column_names}")
@@ -767,7 +769,7 @@ def variable_feature_experiment():
     # Create unified model
     categorical_cardinalities = [5] * max_categorical if max_categorical > 0 else None
 
-    model = VariableFeaturePatchDuET(
+    model = MultiDatasetModel(
         max_numeric_features=max_numeric,
         max_categorical_features=max_categorical,
         num_classes=3,
@@ -779,6 +781,7 @@ def variable_feature_experiment():
         num_layers=3,
         lr=1e-3,
         column_embedding_strategy="auto_expanding",
+        mode="variable_features",
     )
 
     results = []
@@ -895,7 +898,7 @@ def real_world_experiment():
     # Create unified model for real-world data
     categorical_cardinalities = [10] * max_categorical if max_categorical > 0 else None
 
-    model = VariableFeaturePatchDuET(
+    model = MultiDatasetModel(
         max_numeric_features=max_numeric,
         max_categorical_features=max_categorical,
         num_classes=6,  # Support for HAR's 6 classes
@@ -907,6 +910,7 @@ def real_world_experiment():
         num_layers=3,
         lr=1e-3,
         column_embedding_strategy="auto_expanding",
+        mode="variable_features",
     )
 
     results = []
@@ -936,7 +940,7 @@ def real_world_experiment():
 
         # First, train baseline without pretraining (from scratch)
         print("\n  Training baseline from scratch...")
-        baseline_model = VariableFeaturePatchDuET(
+        baseline_model = MultiDatasetModel(
             max_numeric_features=info["n_numeric"],
             max_categorical_features=info["n_categorical"],
             num_classes=info["num_classes"],
@@ -950,6 +954,7 @@ def real_world_experiment():
             num_layers=3,
             lr=1e-3,
             column_embedding_strategy="auto_expanding",
+            mode="variable_features",
         )
 
         baseline_model.set_dataset_schema(

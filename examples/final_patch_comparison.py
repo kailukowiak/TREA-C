@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score, f1_score
 
 from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
-from duet.models.patch_duet import PatchDuET
+from duet.models.multi_dataset_model import MultiDatasetModel
 from duet.utils import get_checkpoint_path, get_output_path
 
 
@@ -200,7 +200,7 @@ def main():
     print("Training PatchDuET Baseline (patches + dual-patch NaN)...")
     print("=" * 60)
 
-    baseline_model = PatchDuET.create_baseline(
+    baseline_model = MultiDatasetModel.create_baseline(
         c_in=c_in,
         seq_len=seq_len,
         num_classes=num_classes,
@@ -211,6 +211,7 @@ def main():
         n_head=8,
         num_layers=3,
         lr=1e-3,
+        mode="standard",
     )
 
     baseline_results = train_model(
@@ -223,7 +224,7 @@ def main():
     print("Training PatchDuET Column-Aware (patches + dual-patch NaN + columns)...")
     print("=" * 60)
 
-    column_model = PatchDuET.create_column_aware(
+    column_model = MultiDatasetModel.create_column_aware(
         c_in=c_in,
         seq_len=seq_len,
         num_classes=num_classes,
@@ -236,6 +237,7 @@ def main():
         num_layers=3,
         lr=1e-3,
         column_embedding_dim=16,
+        mode="standard",
     )
 
     column_results = train_model(
