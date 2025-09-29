@@ -1,4 +1,4 @@
-"""PyTorch Lightning DataModule for DuET."""
+"""PyTorch Lightning DataModule for TREA-C."""
 
 import pytorch_lightning as pl
 

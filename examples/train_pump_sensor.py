@@ -13,8 +13,8 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.pump_sensor import PumpSensorDataset
-from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
-from duet.models.duet_model import DualPatchTransformer
+from data.datamodule_v2 import TimeSeriesDataModuleV2
+from treac.models.duet_model import DualPatchTransformer
 
 
 def visualize_pump_data(dataset, num_samples=3):

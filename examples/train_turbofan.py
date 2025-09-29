@@ -10,9 +10,9 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.data.downloaders.nasa_turbofan import NASATurbofanDataset
-from duet.models.duet_model import DualPatchTransformer
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from data.downloaders.nasa_turbofan import NASATurbofanDataset
+from treac.models.duet_model import DualPatchTransformer
+from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 class PatchTSTClassifier(pl.LightningModule):
@@ -268,7 +268,7 @@ def main():
         print("Alternative: Using Synthetic Data with Realistic Parameters")
         print("=" * 60)
 
-        from duet.utils.dataset import SyntheticTimeSeriesDataset
+        from treac.utils.dataset import SyntheticTimeSeriesDataset
 
         # Create synthetic data mimicking industrial sensors
         train_dataset = SyntheticTimeSeriesDataset(

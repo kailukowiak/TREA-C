@@ -13,14 +13,14 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from sklearn.metrics import accuracy_score, f1_score
 from transformers import PatchTSTConfig, PatchTSTModel
 
-from duet.models import PatchTSTNan
+from treac.models import PatchTSTNan
 
 
 sys.path.append(".")
 
-from duet.data.downloaders.etth1 import ETTh1Dataset
-from duet.models.duet_model import DualPatchTransformer
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from data.downloaders.etth1 import ETTh1Dataset
+from treac.models.duet_model import DualPatchTransformer
+from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 class HFPatchTSTClassifier(pl.LightningModule):
@@ -256,7 +256,7 @@ class PatchTSTClassifier(pl.LightningModule):
         )
 
 
-# PatchTSTNan is now imported from duet.models
+# PatchTSTNan is now imported from treac.models
 
 
 class CNNClassifier(pl.LightningModule):

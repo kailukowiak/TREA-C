@@ -1,7 +1,7 @@
-# Building a Time-Series Transformer with Time-Varying Categorical Inputs (Regression + Classification)
+# Building TREA-C: Triple-Encoded Attention with Time-Varying Categorical Inputs
 
-This document provides a **step-by-step guide** to implement a **Dual-Patch Transformer
-model** that combines both **temporal** and **feature-wise patches**. The model supports
+This document provides a **step-by-step guide** to implement **TREA-C (Triple-Encoded Attention)**
+that combines **value channels**, **mask channels**, and **column embeddings**. The model supports
 **time-varying categorical features** and handles both **regression** and
 **classification** tasks. It also includes support for **pretraining** on unlabeled data
 and fine-tuning with few labels.

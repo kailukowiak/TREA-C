@@ -1,4 +1,4 @@
-"""Utilities for DuET data handling and processing."""
+"""Utilities for TREA-C data handling and processing."""
 
 from utils.data_config import DatasetConfig
 from utils.datamodule import TimeSeriesDataModule

@@ -1,7 +1,8 @@
-# Dual-Patch Transformer
+# TREA-C: Triple-Encoded Attention for Column-aware Time Series
 
 This model is designed for time series data with both numeric and categorical features,
-handling missing values efficiently by encoding them in a dual-patch format.
+handling missing values efficiently by encoding them in a triple-encoded format with
+value channels, mask channels, and column embeddings.
 
 
 ## Development

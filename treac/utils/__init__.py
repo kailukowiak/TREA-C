@@ -1,4 +1,4 @@
-"""Utilities for DuET package."""
+"""Utilities for TREA-C package."""
 
 from .paths import (
     get_checkpoint_path,

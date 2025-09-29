@@ -14,12 +14,12 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.data.downloaders.air_quality import AirQualityDataset
-from duet.data.downloaders.etth1 import ETTh1Dataset
-from duet.data.downloaders.financial_market import FinancialMarketDataset
-from duet.data.downloaders.human_activity import HumanActivityDataset
-from duet.models.multi_dataset_model import MultiDatasetModel
-from duet.utils.multi_dataset_loader import MultiDatasetDataModule
+from treac.data.downloaders.air_quality import AirQualityDataset
+from treac.data.downloaders.etth1 import ETTh1Dataset
+from treac.data.downloaders.financial_market import FinancialMarketDataset
+from treac.data.downloaders.human_activity import HumanActivityDataset
+from treac.models.multi_dataset_model import MultiDatasetModel
+from treac.utils.multi_dataset_loader import MultiDatasetDataModule
 
 
 def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any]]:

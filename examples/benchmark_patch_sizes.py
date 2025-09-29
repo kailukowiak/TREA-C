@@ -4,7 +4,7 @@ import time
 
 import torch
 
-from duet.models import PatchTSTNan
+from treac.models import PatchTSTNan
 
 
 def benchmark_patch_size(patch_size, C_num=20, T=64, batch_size=128, num_batches=10):

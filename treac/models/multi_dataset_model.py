@@ -1,9 +1,9 @@
 """Consolidated multi-dataset transformer model with configurable modes.
 
 This module provides a unified MultiDatasetModel class that combines functionality from:
-1. VariableFeaturePatchDuET - Handles different numbers of features across datasets
-2. MultiDatasetPatchDuET - Multi-dataset training with column embeddings
-3. PretrainPatchDuET - Self-supervised pretraining with SSL objectives
+1. VariableFeatureTREA - Handles different numbers of features across datasets
+2. MultiDatasetTREA - Multi-dataset training with column embeddings
+3. PretrainTREA - Self-supervised pretraining with SSL objectives
 
 The model supports three configurable modes:
 - 'standard': Basic multi-dataset training with column embeddings

@@ -5,7 +5,7 @@ import torch
 
 from train_patchtstnan_ultra_fast import W3SimpleDataset, extract_dataset_metadata
 
-from duet.models import PatchTSTNan
+from treac.models import PatchTSTNan
 
 
 def diagnose_nan_loss():

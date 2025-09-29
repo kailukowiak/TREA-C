@@ -1,1 +1,1 @@
-"""Tests for DuET."""
+"""Tests for TREA-C."""
