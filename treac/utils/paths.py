@@ -41,7 +41,7 @@ def get_checkpoints_dir() -> Path:
     return checkpoints_dir
 
 
-def get_output_path(filename: str, subdir: str = None) -> Path:
+def get_output_path(filename: str, subdir: str | None = None) -> Path:
     """Get a path for output file in the data/datasets/outputs directory.
 
     Args:

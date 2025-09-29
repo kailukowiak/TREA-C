@@ -93,9 +93,9 @@ class W3InMemoryDataset(Dataset):
 class W3DataModule(pl.LightningDataModule):
     def __init__(
         self,
-        train_parquet_path: str = None,
-        test_parquet_path: str = None,
-        metadata: dict = None,
+        train_parquet_path: str | None = None,
+        test_parquet_path: str | None = None,
+        metadata: dict | None = None,
         batch_size: int = 256,
         sequence_length: int = 128,
     ):

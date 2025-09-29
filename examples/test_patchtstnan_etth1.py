@@ -7,7 +7,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.etth1 import ETTh1Dataset
 from treac.models import PatchTSTNan
-from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from utils.datamodule import TimeSeriesDataModule
 
 
 def test_patchtstnan():
@@ -47,7 +47,7 @@ def test_patchtstnan():
     print(f"Val samples: {len(val_dataset)}")
 
     # Create data module
-    dm = TimeSeriesDataModuleV2(
+    dm = TimeSeriesDataModule(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         batch_size=BATCH_SIZE,

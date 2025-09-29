@@ -13,8 +13,8 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.pump_sensor import PumpSensorDataset
-from data.datamodule_v2 import TimeSeriesDataModuleV2
-from treac.models.TREA-C_model import DualPatchTransformer
+from treac.models.triple_attention import DualPatchTransformer
+from utils.datamodule import TimeSeriesDataModule
 
 
 def visualize_pump_data(dataset, num_samples=3):
@@ -109,7 +109,7 @@ def main():
     visualize_pump_data(train_dataset, num_samples=3)
 
     # Create data module
-    dm = TimeSeriesDataModuleV2(
+    dm = TimeSeriesDataModule(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         batch_size=64,

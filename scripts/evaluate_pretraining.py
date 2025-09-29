@@ -15,10 +15,10 @@ import torch
 
 from torch.utils.data import DataLoader
 
-from treac.data.downloaders.air_quality import AirQualityDataset
-from treac.data.downloaders.etth1 import ETTh1Dataset
-from treac.data.downloaders.financial_market import FinancialMarketDataset
-from treac.data.downloaders.human_activity import HumanActivityDataset
+from data.downloaders.air_quality import AirQualityDataset
+from data.downloaders.etth1 import ETTh1Dataset
+from data.downloaders.financial_market import FinancialMarketDataset
+from data.downloaders.human_activity import HumanActivityDataset
 from treac.models.multi_dataset_model import MultiDatasetModel
 
 

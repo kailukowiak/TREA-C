@@ -10,9 +10,9 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from treac.models.TREA-C_model import DualPatchTransformer
-from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from examples.download_har_dataset import HARDataset
+from treac.models.triple_attention import DualPatchTransformer
+from utils.datamodule import TimeSeriesDataModule
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
     print(f"Activities: {train_dataset.activity_names}")
 
     # Create data module
-    dm = TimeSeriesDataModuleV2(
+    dm = TimeSeriesDataModule(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         batch_size=64,

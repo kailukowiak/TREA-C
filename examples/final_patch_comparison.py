@@ -22,7 +22,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from data.downloaders.etth1 import ETTh1Dataset
 from treac.models.multi_dataset_model import MultiDatasetModel
 from treac.utils import get_checkpoint_path, get_output_path
-from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from utils.datamodule import TimeSeriesDataModule
 
 
 def inject_nans(dataset, nan_rate=0.05):
@@ -172,7 +172,7 @@ def main():
     val_dataset_nan = inject_nans(val_dataset, nan_rate=NAN_RATE)
 
     # Create data module
-    dm = TimeSeriesDataModuleV2(
+    dm = TimeSeriesDataModule(
         train_dataset=train_dataset_nan,
         val_dataset=val_dataset_nan,
         batch_size=64,

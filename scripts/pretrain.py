@@ -8,21 +8,22 @@ training on multiple datasets simultaneously using SSL objectives.
 import argparse
 
 from pathlib import Path
+from typing import Any
 
 import pytorch_lightning as pl
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from treac.data.downloaders.air_quality import AirQualityDataset
-from treac.data.downloaders.etth1 import ETTh1Dataset
-from treac.data.downloaders.financial_market import FinancialMarketDataset
-from treac.data.downloaders.human_activity import HumanActivityDataset
+from data.downloaders.air_quality import AirQualityDataset
+from data.downloaders.etth1 import ETTh1Dataset
+from data.downloaders.financial_market import FinancialMarketDataset
+from data.downloaders.human_activity import HumanActivityDataset
+from data.downloaders.multi_dataset_loader import MultiDatasetDataModule
 from treac.models.multi_dataset_model import MultiDatasetModel
-from treac.utils.multi_dataset_loader import MultiDatasetDataModule
 
 
-def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any]]:
+def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, Any]]:
     """Create train and validation datasets for pre-training.
 
     Args:
@@ -104,7 +105,7 @@ def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any
     return {"train": train_datasets, "val": val_datasets}
 
 
-def create_model(datasets: dict[str, dict[str, any]], args) -> MultiDatasetModel:
+def create_model(datasets: dict[str, dict[str, Any]], args) -> MultiDatasetModel:
     """Create pre-training model with proper schema configuration.
 
     Args:

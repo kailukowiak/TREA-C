@@ -11,8 +11,8 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.nasa_turbofan import NASATurbofanDataset
-from treac.models.TREA-C_model import DualPatchTransformer
-from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from treac.models.triple_attention import DualPatchTransformer
+from utils.datamodule import TimeSeriesDataModule
 
 
 class PatchTSTClassifier(pl.LightningModule):
@@ -298,7 +298,7 @@ def main():
         print(f"Val samples: {len(val_dataset)}")
 
     # Create data module
-    dm = TimeSeriesDataModuleV2(
+    dm = TimeSeriesDataModule(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         batch_size=64,
@@ -333,7 +333,7 @@ def main():
     print("Training TREA-C (Dual-Patch Transformer)...")
     print("=" * 60)
 
-    TREA-C_model = DualPatchTransformer(
+    treac_model = DualPatchTransformer(
         C_num=c_in,
         C_cat=feature_info["n_categorical"],
         cat_cardinalities=feature_info["cat_cardinalities"],
@@ -346,8 +346,8 @@ def main():
         lr=1e-3,
     )
 
-    TREA-C_results = train_model(TREA-C_model, dm, "TREA-C", max_epochs=max_epochs)
-    results.append(TREA-C_results)
+    treac_results = train_model(treac_model, dm, "TREA-C", max_epochs=max_epochs)
+    results.append(treac_results)
 
     # 2. Train PatchTST
     print("\n" + "=" * 60)

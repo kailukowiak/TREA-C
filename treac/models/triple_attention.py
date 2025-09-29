@@ -85,6 +85,8 @@ class DualPatchTransformer(pl.LightningModule):
                 "Length of column_names ({len(column_names)}) "
                 "must match C_num ({C_num})"
             )
+        if task == "classification" and num_classes is None:
+            raise ValueError("num_classes must be provided for classification tasks")
 
         # Categorical embeddings (time-varying) with variable cardinalities
         self.cat_embs = nn.ModuleList(
@@ -117,6 +119,8 @@ class DualPatchTransformer(pl.LightningModule):
 
         # Output heads
         if task == "classification":
+            # Type narrowing: we validated num_classes is not None above
+            assert num_classes is not None
             self.head = nn.Linear(d_model, num_classes)
             self.loss_fn = nn.CrossEntropyLoss()
         else:

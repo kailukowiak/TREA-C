@@ -16,6 +16,10 @@ class TimeSeriesDataModule(pl.LightningDataModule):
         batch_size: int = 32,
         num_workers: int = 0,
         train_val_split: float = 0.8,
+        # For pre-made datasets
+        train_dataset=None,
+        val_dataset=None,
+        test_dataset=None,
         # For synthetic data
         synthetic: bool = True,
         num_samples: int = 1000,
@@ -60,6 +64,11 @@ class TimeSeriesDataModule(pl.LightningDataModule):
         self.train_val_split = train_val_split
         self.synthetic = synthetic
 
+        # Pre-made datasets
+        self._train_dataset = train_dataset
+        self._val_dataset = val_dataset
+        self._test_dataset = test_dataset
+
         # Synthetic data params
         self.num_samples = num_samples
         self.T = T
@@ -78,6 +87,13 @@ class TimeSeriesDataModule(pl.LightningDataModule):
 
     def setup(self, stage: str | None = None):
         """Set up datasets."""
+        # If pre-made datasets are provided, use them directly
+        if self._train_dataset is not None:
+            self.train_dataset = self._train_dataset
+            self.val_dataset = self._val_dataset
+            self.test_dataset = self._test_dataset
+            return
+
         if self.synthetic:
             # Create synthetic datasets
             if stage == "fit" or stage is None:

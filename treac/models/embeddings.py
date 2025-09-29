@@ -175,9 +175,7 @@ class BERTColumnEmbedding(nn.Module):
                     continue
 
                 # Split camelCase using regex
-                camel_tokens = re.findall(
-                    r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part
-                )
+                camel_tokens = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part)
                 if not camel_tokens:
                     camel_tokens = [part]
 
@@ -297,13 +295,11 @@ class FrozenBERTColumnEmbedder(nn.Module):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Cache files
-        model_name = bert_model.replace('/', '_')
+        model_name = bert_model.replace("/", "_")
         self.embeddings_cache_file = (
             self.cache_dir / f"bert_embeddings_{model_name}.pkl"
         )
-        self.metadata_cache_file = (
-            self.cache_dir / f"metadata_{model_name}.json"
-        )
+        self.metadata_cache_file = self.cache_dir / f"metadata_{model_name}.json"
 
         # Initialize BERT (lazy loading)
         self._bert = None
@@ -383,9 +379,7 @@ class FrozenBERTColumnEmbedder(nn.Module):
                     continue
 
                 # Split camelCase using regex
-                camel_tokens = re.findall(
-                    r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part
-                )
+                camel_tokens = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", part)
                 if not camel_tokens:
                     camel_tokens = [part]
 
@@ -404,13 +398,10 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         # Check if already cached
         cache_key = (
-            f"{column_name}_{self.tokenization_strategy}_"
-            f"{self.aggregation_strategy}"
+            f"{column_name}_{self.tokenization_strategy}_{self.aggregation_strategy}"
         )
         if cache_key in self.embedding_cache:
-            return torch.tensor(
-                self.embedding_cache[cache_key], device=self.device
-            )
+            return torch.tensor(self.embedding_cache[cache_key], device=self.device)
 
         # Process column name
         processed_text = self._process_column_name(column_name)
@@ -465,8 +456,7 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         for col in column_names:
             cache_key = (
-                f"{col}_{self.tokenization_strategy}_"
-                f"{self.aggregation_strategy}"
+                f"{col}_{self.tokenization_strategy}_{self.aggregation_strategy}"
             )
 
             if cache_key in self.embedding_cache:
@@ -707,17 +697,13 @@ ETTH1_COLUMNS = ["HUFL", "HULL", "MUFL", "MULL", "LUFL", "LULL", "OT"]
 if __name__ == "__main__":
     # Test simple embeddings
     print("Testing Simple Column Embeddings...")
-    simple_emb = create_column_embedding(
-        ETTH1_COLUMNS, target_dim=1, strategy="simple"
-    )
+    simple_emb = create_column_embedding(ETTH1_COLUMNS, target_dim=1, strategy="simple")
     embeddings = simple_emb(32, 96)
     print(f"Simple embeddings shape: {embeddings.shape}")
 
     # Test BERT embeddings
     print("\nTesting BERT Column Embeddings...")
-    bert_emb = create_column_embedding(
-        ETTH1_COLUMNS, target_dim=1, strategy="bert"
-    )
+    bert_emb = create_column_embedding(ETTH1_COLUMNS, target_dim=1, strategy="bert")
     embeddings = bert_emb(32, 96)
     print(f"BERT embeddings shape: {embeddings.shape}")
 

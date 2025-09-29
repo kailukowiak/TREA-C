@@ -35,10 +35,10 @@ class PatchTSTNan(pl.LightningModule):
 
     def __init__(
         self,
-        C_num: int = None,  # Make optional so c_in can be used instead
+        C_num: int | None = None,  # Make optional so c_in can be used instead
         C_cat: int = 0,
         cat_cardinality: int = 1,
-        T: int = None,  # Make optional so seq_len can be used instead
+        T: int | None = None,  # Make optional so seq_len can be used instead
         d_model: int = 64,
         patch_size: int = 8,
         num_classes: int = 2,
@@ -48,13 +48,13 @@ class PatchTSTNan(pl.LightningModule):
         learning_rate: float = 1e-3,
         task: str = "classification",
         # Alternative parameter names for compatibility
-        c_in: int = None,
-        seq_len: int = None,
-        patch_len: int = None,
-        stride: int = None,
-        n_head: int = None,
-        num_layers: int = None,
-        lr: float = None,
+        c_in: int | None = None,
+        seq_len: int | None = None,
+        patch_len: int | None = None,
+        stride: int | None = None,
+        n_head: int | None = None,
+        num_layers: int | None = None,
+        lr: float | None = None,
     ):
         super().__init__()
         self.save_hyperparameters()

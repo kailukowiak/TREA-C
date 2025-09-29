@@ -133,13 +133,20 @@ class SyntheticTimeSeriesDataset(Dataset):
             # Use means and stds from different channels
             for i in range(min(2, C_num)):
                 signal_components.append(torch.nanmean(self.x_num[:, i, :], dim=1))
-                signal_components.append(torch.nanstd(self.x_num[:, i, :], dim=1))
+                # torch.nanstd not available in all versions, use manual calculation
+                x_i = self.x_num[:, i, :]
+                mask = ~torch.isnan(x_i)
+                mean = torch.nanmean(x_i, dim=1, keepdim=True)
+                std = torch.sqrt(torch.nanmean((x_i - mean) ** 2, dim=1))
+                signal_components.append(std)
 
             # Non-linear combination
             weights = torch.randn(len(signal_components))
-            combined = sum(
+            # Stack and sum to get proper type inference
+            weighted_comps = [
                 w * comp for w, comp in zip(weights, signal_components, strict=False)
-            )
+            ]
+            combined = torch.stack(weighted_comps).sum(dim=0)
 
             # Add non-linearity and noise
             self.y = (

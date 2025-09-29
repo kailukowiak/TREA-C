@@ -30,7 +30,7 @@ from data.downloaders.etth1 import ETTh1Dataset
 from data.downloaders.human_activity import HumanActivityDataset
 from treac.models.multi_dataset_model import MultiDatasetModel
 from treac.utils import get_checkpoint_path, get_output_path
-from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from utils.datamodule import TimeSeriesDataModule
 
 
 def create_synthetic_dataset(
@@ -406,7 +406,7 @@ def train_baseline_without_pretraining(final_dataset_name, final_dataset_info):
         num_classes = train_data["num_classes"]
 
     # Create data module
-    dm = TimeSeriesDataModuleV2(
+    dm = TimeSeriesDataModule(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         batch_size=32,
@@ -542,7 +542,7 @@ def multi_dataset_experiment():
                 num_classes = train_data["num_classes"]
 
             # Create data module
-            dm = TimeSeriesDataModuleV2(
+            dm = TimeSeriesDataModule(
                 train_dataset=train_dataset,
                 val_dataset=val_dataset,
                 batch_size=32,
@@ -803,7 +803,7 @@ def variable_feature_experiment():
         )
 
         # Create data module
-        dm = TimeSeriesDataModuleV2(
+        dm = TimeSeriesDataModule(
             train_dataset=train_dataset,
             val_dataset=val_dataset,
             batch_size=32,
@@ -964,7 +964,7 @@ def real_world_experiment():
         )
 
         # Create data module for baseline
-        baseline_dm = TimeSeriesDataModuleV2(
+        baseline_dm = TimeSeriesDataModule(
             train_dataset=train_dataset,
             val_dataset=val_dataset,
             batch_size=32,
@@ -994,7 +994,7 @@ def real_world_experiment():
         )
 
         # Create data module
-        dm = TimeSeriesDataModuleV2(
+        dm = TimeSeriesDataModule(
             train_dataset=train_dataset,
             val_dataset=val_dataset,
             batch_size=32,
