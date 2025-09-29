@@ -18,9 +18,9 @@ from duet.models import PatchTSTNan
 
 sys.path.append(".")
 
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.models.duet_model import DualPatchTransformer
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 class HFPatchTSTClassifier(pl.LightningModule):

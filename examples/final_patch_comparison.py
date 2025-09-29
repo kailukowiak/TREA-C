@@ -19,10 +19,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.metrics import accuracy_score, f1_score
 
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.models.multi_dataset_model import MultiDatasetModel
 from duet.utils import get_checkpoint_path, get_output_path
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 def inject_nans(dataset, nan_rate=0.05):

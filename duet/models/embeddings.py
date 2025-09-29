@@ -71,7 +71,9 @@ class SimpleColumnEmbedding(nn.Module):
         Returns:
             Column embeddings tensor [num_columns, target_dim]
         """
-        column_embs = self.embedding(self.column_indices)  # [num_columns, embedding_dim]
+        column_embs = self.embedding(
+            self.column_indices
+        )  # [num_columns, embedding_dim]
         return self.projection(column_embs)  # [num_columns, target_dim]
 
     def forward(self, batch_size: int, sequence_length: int) -> torch.Tensor:
@@ -182,7 +184,9 @@ class BERTColumnEmbedding(nn.Module):
             return " ".join(token.lower() for token in all_tokens if token)
 
         else:
-            raise ValueError(f"Unknown tokenization strategy: {self.tokenization_strategy}")
+            raise ValueError(
+                f"Unknown tokenization strategy: {self.tokenization_strategy}"
+            )
 
     def _precompute_embeddings(self):
         """Pre-compute embeddings for all column names."""
@@ -222,7 +226,9 @@ class BERTColumnEmbedding(nn.Module):
             elif self.aggregation_strategy == "max":
                 pooled = hidden_states.max(dim=1)[0]  # [num_cols, bert_dim]
             else:
-                raise ValueError(f"Unknown aggregation strategy: {self.aggregation_strategy}")
+                raise ValueError(
+                    f"Unknown aggregation strategy: {self.aggregation_strategy}"
+                )
 
             # Project to target dimension
             projected = self.projection(pooled)  # [num_cols, target_dim]
@@ -383,14 +389,18 @@ class FrozenBERTColumnEmbedder(nn.Module):
             return " ".join(token.lower() for token in all_tokens if token)
 
         else:
-            raise ValueError(f"Unknown tokenization strategy: {self.tokenization_strategy}")
+            raise ValueError(
+                f"Unknown tokenization strategy: {self.tokenization_strategy}"
+            )
 
     def _compute_bert_embedding(self, column_name: str) -> torch.Tensor:
         """Compute BERT embedding for a single column name."""
         self._init_bert()
 
         # Check if already cached
-        cache_key = f"{column_name}_{self.tokenization_strategy}_{self.aggregation_strategy}"
+        cache_key = (
+            f"{column_name}_{self.tokenization_strategy}_{self.aggregation_strategy}"
+        )
         if cache_key in self.embedding_cache:
             return torch.tensor(self.embedding_cache[cache_key], device=self.device)
 
@@ -424,7 +434,9 @@ class FrozenBERTColumnEmbedder(nn.Module):
             elif self.aggregation_strategy == "max":
                 pooled = hidden_states.max(dim=1)[0]  # [1, bert_dim]
             else:
-                raise ValueError(f"Unknown aggregation strategy: {self.aggregation_strategy}")
+                raise ValueError(
+                    f"Unknown aggregation strategy: {self.aggregation_strategy}"
+                )
 
             # Cache the result
             embedding = pooled.squeeze(0).cpu()  # [bert_dim]
@@ -444,11 +456,15 @@ class FrozenBERTColumnEmbedder(nn.Module):
         projection_device = next(self.projection.parameters()).device
 
         for col in column_names:
-            cache_key = f"{col}_{self.tokenization_strategy}_{self.aggregation_strategy}"
+            cache_key = (
+                f"{col}_{self.tokenization_strategy}_{self.aggregation_strategy}"
+            )
 
             if cache_key in self.embedding_cache:
                 # Use cached embedding
-                emb = torch.tensor(self.embedding_cache[cache_key], device=projection_device)
+                emb = torch.tensor(
+                    self.embedding_cache[cache_key], device=projection_device
+                )
             else:
                 # Compute new embedding
                 emb = self._compute_bert_embedding(col)
@@ -462,7 +478,9 @@ class FrozenBERTColumnEmbedder(nn.Module):
 
         # Project to target dimension
         with torch.no_grad():
-            self.current_embeddings = self.projection(bert_embeddings)  # [num_columns, target_dim]
+            self.current_embeddings = self.projection(
+                bert_embeddings
+            )  # [num_columns, target_dim]
 
         # Save cache if we computed new embeddings
         if new_embeddings_count > 0:
@@ -487,8 +505,12 @@ class FrozenBERTColumnEmbedder(nn.Module):
         column_embs = self.current_embeddings.to(projection_device)
 
         # Expand to batch and time dimensions
-        column_embs = column_embs.unsqueeze(0).unsqueeze(2)  # [1, num_columns, 1, target_dim]
-        column_embs = column_embs.repeat(batch_size, 1, sequence_length, 1)  # [B, C, T, target_dim]
+        column_embs = column_embs.unsqueeze(0).unsqueeze(
+            2
+        )  # [1, num_columns, 1, target_dim]
+        column_embs = column_embs.repeat(
+            batch_size, 1, sequence_length, 1
+        )  # [B, C, T, target_dim]
 
         # Transpose and squeeze if needed
         column_embs = column_embs.permute(0, 1, 3, 2)  # [B, C, target_dim, T]
@@ -573,7 +595,9 @@ class AutoExpandingEmbedder(nn.Module):
 
         # Get indices for current columns
         self.current_indices = [self.column_to_idx[col] for col in column_names]
-        print(f"Set {len(column_names)} columns (vocabulary size: {self.embedding.num_embeddings})")
+        print(
+            f"Set {len(column_names)} columns (vocabulary size: {self.embedding.num_embeddings})"
+        )
 
     def get_embeddings(self) -> torch.Tensor:
         """Get embeddings for current columns."""
@@ -600,6 +624,7 @@ class AutoExpandingEmbedder(nn.Module):
 
 
 # Factory functions
+
 
 def create_column_embedding(
     column_names: list[str],
@@ -635,9 +660,7 @@ def create_column_embedding(
 
 
 def create_multi_dataset_embedder(
-    strategy: str = "frozen_bert",
-    target_dim: int = 1,
-    **kwargs
+    strategy: str = "frozen_bert", target_dim: int = 1, **kwargs
 ) -> FrozenBERTColumnEmbedder | AutoExpandingEmbedder:
     """Factory function for multi-dataset column embedders.
 

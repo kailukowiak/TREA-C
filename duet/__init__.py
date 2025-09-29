@@ -2,8 +2,8 @@
 
 __version__ = "0.1.0"
 
-from utils import SyntheticTimeSeriesDataset, TimeSeriesDataModule
 from duet.models import DualPatchTransformer
+from utils import SyntheticTimeSeriesDataset, TimeSeriesDataModule
 
 
 __all__ = [

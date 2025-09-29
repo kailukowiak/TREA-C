@@ -51,7 +51,6 @@ class MultiDatasetModel(pl.LightningModule):
         max_categorical_features: int = 0,
         num_classes: int = 2,
         mode: str = "variable_features",
-
         # Architecture parameters
         patch_len: int = 16,
         stride: int = 8,
@@ -59,25 +58,20 @@ class MultiDatasetModel(pl.LightningModule):
         n_head: int = 8,
         num_layers: int = 3,
         max_sequence_length: int = 1024,
-
         # Training parameters
         lr: float = 1e-3,
         task: str = "classification",
-
         # Feature handling
         feature_padding_value: float = 0.0,
         use_feature_masks: bool = True,
-
         # Column embedding parameters
         column_embedding_strategy: str = "auto_expanding",
         bert_model: str = "bert-base-uncased",
         column_embedding_dim: int = 16,
         initial_vocab_size: int = 1000,
-
         # Categorical embedding parameters
         categorical_cardinalities: list[int] | None = None,
         categorical_embedding_dim: int = 16,
-
         # SSL parameters (for pretrain mode)
         ssl_objectives: dict[str, bool] | None = None,
         mask_ratio: float = 0.15,
@@ -88,7 +82,6 @@ class MultiDatasetModel(pl.LightningModule):
         lambda_temporal: float = 0.5,
         lambda_contrastive: float = 0.3,
         lambda_supervised: float = 0.1,
-
         **embedder_kwargs,
     ):
         """Initialize MultiDatasetModel.
@@ -166,10 +159,12 @@ class MultiDatasetModel(pl.LightningModule):
                     f"must match max_categorical_features ({max_categorical_features})"
                 )
 
-            self.categorical_embeddings = nn.ModuleList([
-                nn.Embedding(cardinality, categorical_embedding_dim)
-                for cardinality in categorical_cardinalities
-            ])
+            self.categorical_embeddings = nn.ModuleList(
+                [
+                    nn.Embedding(cardinality, categorical_embedding_dim)
+                    for cardinality in categorical_cardinalities
+                ]
+            )
 
         # Column embeddings
         self.use_column_embeddings = column_embedding_strategy != "none"
@@ -181,10 +176,12 @@ class MultiDatasetModel(pl.LightningModule):
             if column_embedding_strategy == "frozen_bert":
                 embedder_args.update({"bert_model": bert_model})
             elif column_embedding_strategy == "auto_expanding":
-                embedder_args.update({
-                    "embedding_dim": column_embedding_dim,
-                    "initial_vocab_size": initial_vocab_size,
-                })
+                embedder_args.update(
+                    {
+                        "embedding_dim": column_embedding_dim,
+                        "initial_vocab_size": initial_vocab_size,
+                    }
+                )
 
             self.column_embedder = create_multi_dataset_embedder(
                 strategy=column_embedding_strategy, **embedder_args
@@ -206,13 +203,15 @@ class MultiDatasetModel(pl.LightningModule):
                 categorical_channels += 1  # + column_emb
 
             total_input_channels = (
-                max_numeric_features * numeric_channels +
-                max_categorical_features * categorical_channels
+                max_numeric_features * numeric_channels
+                + max_categorical_features * categorical_channels
             )
         else:
             # Standard mode: fixed feature space
             input_channels_per_feature = 3 if self.use_column_embeddings else 2
-            total_input_channels = patch_len * (input_channels_per_feature * max_numeric_features)
+            total_input_channels = patch_len * (
+                input_channels_per_feature * max_numeric_features
+            )
 
         # Patch embedding
         if mode in ["variable_features", "pretrain"]:
@@ -241,9 +240,14 @@ class MultiDatasetModel(pl.LightningModule):
         # SSL components (for pretrain mode)
         if mode == "pretrain":
             self._setup_ssl_components(
-                ssl_objectives, mask_ratio, temporal_shuffle_ratio,
-                contrastive_temperature, augmentation_strength,
-                lambda_masked, lambda_temporal, lambda_contrastive
+                ssl_objectives,
+                mask_ratio,
+                temporal_shuffle_ratio,
+                contrastive_temperature,
+                augmentation_strength,
+                lambda_masked,
+                lambda_temporal,
+                lambda_contrastive,
             )
             self.lambda_supervised = lambda_supervised
 
@@ -348,10 +352,11 @@ class MultiDatasetModel(pl.LightningModule):
         self.current_dataset_info = {
             "numeric_features": numeric_features,
             "categorical_features": categorical_features,
-            "column_names": column_names or [
-                f"feature_{i}" for i in range(numeric_features + categorical_features)
-            ],
-            "feature_mapping": self._create_feature_mapping(numeric_features, categorical_features),
+            "column_names": column_names
+            or [f"feature_{i}" for i in range(numeric_features + categorical_features)],
+            "feature_mapping": self._create_feature_mapping(
+                numeric_features, categorical_features
+            ),
         }
 
         # Set column embeddings if enabled
@@ -360,9 +365,13 @@ class MultiDatasetModel(pl.LightningModule):
                 full_column_names = self._get_padded_column_names()
                 self.column_embedder.set_columns(full_column_names)
             else:
-                self.column_embedder.set_columns(self.current_dataset_info["column_names"])
+                self.column_embedder.set_columns(
+                    self.current_dataset_info["column_names"]
+                )
 
-        print(f"Set dataset schema: {numeric_features} numeric + {categorical_features} categorical features")
+        print(
+            f"Set dataset schema: {numeric_features} numeric + {categorical_features} categorical features"
+        )
         if column_names:
             print(f"Column names: {column_names}")
 
@@ -381,7 +390,9 @@ class MultiDatasetModel(pl.LightningModule):
         else:
             print(f"No column embedder - ignoring column names: {column_names}")
 
-    def _create_feature_mapping(self, numeric_features: int, categorical_features: int) -> dict[str, Any]:
+    def _create_feature_mapping(
+        self, numeric_features: int, categorical_features: int
+    ) -> dict[str, Any]:
         """Create mapping for current dataset features to unified space."""
         return {
             "numeric_start": 0,
@@ -397,17 +408,23 @@ class MultiDatasetModel(pl.LightningModule):
         mapping = self.current_dataset_info["feature_mapping"]
 
         # Create full column name list
-        full_names = ["<UNUSED>"] * (self.max_numeric_features + self.max_categorical_features)
+        full_names = ["<UNUSED>"] * (
+            self.max_numeric_features + self.max_categorical_features
+        )
 
         # Fill in actual column names
-        actual_names = column_names[:mapping["total_active_features"]]
+        actual_names = column_names[: mapping["total_active_features"]]
 
         # Place numeric features
-        for i, name in enumerate(actual_names[:self.current_dataset_info["numeric_features"]]):
+        for i, name in enumerate(
+            actual_names[: self.current_dataset_info["numeric_features"]]
+        ):
             full_names[i] = name
 
         # Place categorical features
-        for i, name in enumerate(actual_names[self.current_dataset_info["numeric_features"]:]):
+        for i, name in enumerate(
+            actual_names[self.current_dataset_info["numeric_features"] :]
+        ):
             full_names[self.max_numeric_features + i] = name
 
         return full_names
@@ -459,11 +476,20 @@ class MultiDatasetModel(pl.LightningModule):
             if num_categorical > 0:
                 for i in range(num_categorical):
                     cat_indices = x_cat[:, i, :].long()  # [B, T]
-                    embedded = self.categorical_embeddings[i](cat_indices)  # [B, T, embedding_dim]
-                    x_cat_embedded[:, i, :, :] = embedded.permute(0, 2, 1)  # [B, embedding_dim, T]
+                    embedded = self.categorical_embeddings[i](
+                        cat_indices
+                    )  # [B, T, embedding_dim]
+                    x_cat_embedded[:, i, :, :] = embedded.permute(
+                        0, 2, 1
+                    )  # [B, embedding_dim, T]
 
                 # Mark categorical features as present
-                feature_mask[:, self.max_numeric_features:self.max_numeric_features + num_categorical, :] = 1.0
+                feature_mask[
+                    :,
+                    self.max_numeric_features : self.max_numeric_features
+                    + num_categorical,
+                    :,
+                ] = 1.0
 
         return x_num_padded, x_cat_embedded, feature_mask
 
@@ -475,7 +501,9 @@ class MultiDatasetModel(pl.LightningModule):
         num_patches = (seq_len - self.patch_len) // self.stride + 1
 
         if num_patches <= 0:
-            raise ValueError(f"Sequence length {seq_len} too short for patch_len={self.patch_len}")
+            raise ValueError(
+                f"Sequence length {seq_len} too short for patch_len={self.patch_len}"
+            )
 
         # Create patches using unfold
         patches = x.unfold(dimension=2, size=self.patch_len, step=self.stride)
@@ -540,7 +568,9 @@ class MultiDatasetModel(pl.LightningModule):
         patch_embeddings = patch_embeddings + self.get_positional_encoding(num_patches)
 
         # Transformer
-        transformer_out = self.transformer(patch_embeddings)  # [B, num_patches, d_model]
+        transformer_out = self.transformer(
+            patch_embeddings
+        )  # [B, num_patches, d_model]
 
         # Global average pooling
         pooled = transformer_out.mean(dim=1)  # [B, d_model]
@@ -554,11 +584,15 @@ class MultiDatasetModel(pl.LightningModule):
         B, _, T = x_num.shape
 
         # Pad features to unified space with categorical embeddings
-        x_num_padded, x_cat_embedded, feature_mask = self.pad_features_to_unified_space(x_num, x_cat)
+        x_num_padded, x_cat_embedded, feature_mask = self.pad_features_to_unified_space(
+            x_num, x_cat
+        )
 
         # Handle numeric features with dual-patch NaN handling
         m_nan = torch.isnan(x_num_padded).float()  # [B, max_numeric_features, T]
-        x_num_val = torch.nan_to_num(x_num_padded, nan=0.0)  # [B, max_numeric_features, T]
+        x_num_val = torch.nan_to_num(
+            x_num_padded, nan=0.0
+        )  # [B, max_numeric_features, T]
 
         # Prepare channels for concatenation
         channels_to_cat = []
@@ -568,12 +602,12 @@ class MultiDatasetModel(pl.LightningModule):
         channels_to_cat.append(m_nan)
 
         if self.use_feature_masks:
-            numeric_feature_mask = feature_mask[:, :self.max_numeric_features, :]
+            numeric_feature_mask = feature_mask[:, : self.max_numeric_features, :]
             channels_to_cat.append(numeric_feature_mask)
 
         if self.use_column_embeddings and self.column_embedder is not None:
             col_emb = self.column_embedder(B, T)  # [B, max_total_features, T]
-            numeric_col_emb = col_emb[:, :self.max_numeric_features, :]
+            numeric_col_emb = col_emb[:, : self.max_numeric_features, :]
             channels_to_cat.append(numeric_col_emb)
 
         # Add categorical channels: [embedding_dims, feature_mask?, column_emb?]
@@ -585,11 +619,11 @@ class MultiDatasetModel(pl.LightningModule):
         channels_to_cat.append(x_cat_reshaped)
 
         if self.use_feature_masks:
-            categorical_feature_mask = feature_mask[:, self.max_numeric_features:, :]
+            categorical_feature_mask = feature_mask[:, self.max_numeric_features :, :]
             channels_to_cat.append(categorical_feature_mask)
 
         if self.use_column_embeddings and self.column_embedder is not None:
-            categorical_col_emb = col_emb[:, self.max_numeric_features:, :]
+            categorical_col_emb = col_emb[:, self.max_numeric_features :, :]
             channels_to_cat.append(categorical_col_emb)
 
         # Concatenate all channels
@@ -607,7 +641,9 @@ class MultiDatasetModel(pl.LightningModule):
         patch_embeddings = patch_embeddings + pos_enc
 
         # Transformer
-        transformer_out = self.transformer(patch_embeddings)  # [B, num_patches, d_model]
+        transformer_out = self.transformer(
+            patch_embeddings
+        )  # [B, num_patches, d_model]
 
         # Global average pooling
         pooled = transformer_out.mean(dim=1)  # [B, d_model]
@@ -624,12 +660,16 @@ class MultiDatasetModel(pl.LightningModule):
     ) -> torch.Tensor:
         """Create patches with all feature processing for SSL (pretrain mode only)."""
         if self.mode != "pretrain":
-            raise RuntimeError("create_patches_with_features only available in pretrain mode")
+            raise RuntimeError(
+                "create_patches_with_features only available in pretrain mode"
+            )
 
         B, _, T = x_num.shape
 
         # Use the same feature padding approach as the forward method
-        x_padded, x_cat_embedded, feature_mask_padded = self.pad_features_to_unified_space(x_num, x_cat)
+        x_padded, x_cat_embedded, feature_mask_padded = (
+            self.pad_features_to_unified_space(x_num, x_cat)
+        )
 
         # Handle NaNs on the padded space
         m_nan = torch.isnan(x_padded).float()
@@ -694,8 +734,12 @@ class MultiDatasetModel(pl.LightningModule):
 
         # Masked Patch Prediction
         if self.ssl_objectives_config.get("masked_patch", False):
-            mask = self.ssl_objectives.masked_predictor.create_mask(num_patches, x_num.device)
-            masked_patches, targets = self.ssl_objectives.masked_predictor.apply_masking(patches, mask)
+            mask = self.ssl_objectives.masked_predictor.create_mask(
+                num_patches, x_num.device
+            )
+            masked_patches, targets = (
+                self.ssl_objectives.masked_predictor.apply_masking(patches, mask)
+            )
 
             # Forward through transformer
             patch_embeddings = self.patch_embedding(masked_patches)
@@ -714,7 +758,9 @@ class MultiDatasetModel(pl.LightningModule):
 
         # Temporal Order Prediction
         if self.ssl_objectives_config.get("temporal_order", False):
-            shuffled_patches, order_targets = self.ssl_objectives.temporal_predictor.create_shuffled_sequence(patches)
+            shuffled_patches, order_targets = (
+                self.ssl_objectives.temporal_predictor.create_shuffled_sequence(patches)
+            )
 
             # Forward through transformer
             patch_embeddings = self.patch_embedding(shuffled_patches)
@@ -723,11 +769,18 @@ class MultiDatasetModel(pl.LightningModule):
             transformer_out = self.transformer(patch_embeddings)
 
             # Temporal order prediction with dynamic projection
-            temporal_features = self.ssl_heads["temporal_order"](transformer_out.mean(dim=1))
+            temporal_features = self.ssl_heads["temporal_order"](
+                transformer_out.mean(dim=1)
+            )
 
             # Dynamic projection to num_patches
-            if not hasattr(self, "temporal_projection") or self.temporal_projection.out_features != num_patches:
-                self.temporal_projection = nn.Linear(self.hparams.d_model, num_patches).to(temporal_features.device)
+            if (
+                not hasattr(self, "temporal_projection")
+                or self.temporal_projection.out_features != num_patches
+            ):
+                self.temporal_projection = nn.Linear(
+                    self.hparams.d_model, num_patches
+                ).to(temporal_features.device)
                 torch.nn.init.xavier_uniform_(self.temporal_projection.weight)
                 torch.nn.init.zeros_(self.temporal_projection.bias)
 
@@ -762,7 +815,9 @@ class MultiDatasetModel(pl.LightningModule):
 
         return ssl_outputs
 
-    def compute_ssl_losses(self, ssl_outputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    def compute_ssl_losses(
+        self, ssl_outputs: dict[str, torch.Tensor]
+    ) -> dict[str, torch.Tensor]:
         """Compute SSL losses from SSL outputs (pretrain mode only)."""
         if self.mode != "pretrain":
             raise RuntimeError("compute_ssl_losses only available in pretrain mode")
@@ -789,14 +844,20 @@ class MultiDatasetModel(pl.LightningModule):
                 targ_masked = targets_flat[mask_expanded]
 
                 # Check for NaN/Inf values
-                if (torch.isnan(pred_masked).any() or torch.isnan(targ_masked).any() or
-                    torch.isinf(pred_masked).any() or torch.isinf(targ_masked).any()):
+                if (
+                    torch.isnan(pred_masked).any()
+                    or torch.isnan(targ_masked).any()
+                    or torch.isinf(pred_masked).any()
+                    or torch.isinf(targ_masked).any()
+                ):
                     reconstruction_loss = torch.tensor(0.0, device=predictions.device)
                 else:
                     reconstruction_loss = F.mse_loss(pred_masked, targ_masked)
                     reconstruction_loss = torch.clamp(reconstruction_loss, 0, 100.0)
 
-                losses["reconstruction"] = reconstruction_loss * self.ssl_objectives.lambda_masked
+                losses["reconstruction"] = (
+                    reconstruction_loss * self.ssl_objectives.lambda_masked
+                )
 
         # Temporal Order Prediction Loss
         if "temporal_order" in ssl_outputs:
@@ -805,14 +866,20 @@ class MultiDatasetModel(pl.LightningModule):
             targets = outputs["targets"]
 
             # Check for NaN/Inf values
-            if (torch.isnan(predictions).any() or torch.isnan(targets).any() or
-                torch.isinf(predictions).any() or torch.isinf(targets).any()):
+            if (
+                torch.isnan(predictions).any()
+                or torch.isnan(targets).any()
+                or torch.isinf(predictions).any()
+                or torch.isinf(targets).any()
+            ):
                 temporal_loss = torch.tensor(0.0, device=predictions.device)
             else:
                 temporal_loss = F.mse_loss(predictions, targets.float())
                 temporal_loss = torch.clamp(temporal_loss, 0, 100.0)
 
-            losses["temporal_order"] = temporal_loss * self.ssl_objectives.lambda_temporal
+            losses["temporal_order"] = (
+                temporal_loss * self.ssl_objectives.lambda_temporal
+            )
 
         # Contrastive Loss
         if "contrastive" in ssl_outputs:
@@ -821,14 +888,24 @@ class MultiDatasetModel(pl.LightningModule):
             augmented = outputs["augmented"]
 
             # Check for NaN/Inf values
-            if (torch.isnan(original).any() or torch.isnan(augmented).any() or
-                torch.isinf(original).any() or torch.isinf(augmented).any()):
+            if (
+                torch.isnan(original).any()
+                or torch.isnan(augmented).any()
+                or torch.isinf(original).any()
+                or torch.isinf(augmented).any()
+            ):
                 contrastive_loss = torch.tensor(0.0, device=original.device)
             else:
-                contrastive_loss = self.ssl_objectives.contrastive_learner.contrastive_loss(original, augmented)
+                contrastive_loss = (
+                    self.ssl_objectives.contrastive_learner.contrastive_loss(
+                        original, augmented
+                    )
+                )
                 contrastive_loss = torch.clamp(contrastive_loss, 0, 10.0)
 
-            losses["contrastive"] = contrastive_loss * self.ssl_objectives.lambda_contrastive
+            losses["contrastive"] = (
+                contrastive_loss * self.ssl_objectives.lambda_contrastive
+            )
 
         # Total SSL loss
         if losses:
@@ -886,8 +963,8 @@ class MultiDatasetModel(pl.LightningModule):
         dataset_names = batch["dataset_name"]
 
         for i, dataset_name in enumerate(dataset_names):
-            sample_y = y[i:i+1]
-            sample_y_hat = y_hat[i:i+1]
+            sample_y = y[i : i + 1]
+            sample_y_hat = y_hat[i : i + 1]
             sample_num_classes = batch["num_classes"][i].item()
 
             # Adjust predictions for this dataset's number of classes
@@ -908,11 +985,17 @@ class MultiDatasetModel(pl.LightningModule):
             supervised_loss = torch.tensor(0.0, device=x_num.device)
 
         # Total loss
-        total_ssl_loss = ssl_losses.get("total_ssl", torch.tensor(0.0, device=x_num.device))
+        total_ssl_loss = ssl_losses.get(
+            "total_ssl", torch.tensor(0.0, device=x_num.device)
+        )
         total_loss = total_ssl_loss + self.lambda_supervised * supervised_loss
 
         # Check for NaN in individual components
-        if (torch.isnan(total_ssl_loss) or torch.isnan(supervised_loss) or torch.isnan(total_loss)):
+        if (
+            torch.isnan(total_ssl_loss)
+            or torch.isnan(supervised_loss)
+            or torch.isnan(total_loss)
+        ):
             print("NaN detected!")
             print(f"  SSL loss: {total_ssl_loss}")
             print(f"  Supervised loss: {supervised_loss}")
@@ -945,7 +1028,9 @@ class MultiDatasetModel(pl.LightningModule):
 
             if self.mode == "pretrain":
                 # Handle multi-class datasets
-                dataset_name = batch["dataset_name"][0]  # Assume same dataset in validation batch
+                dataset_name = batch["dataset_name"][
+                    0
+                ]  # Assume same dataset in validation batch
                 num_classes = batch["num_classes"][0].item()
                 y_hat_adj = y_hat[:, :num_classes]
                 loss = self.loss_fn(y_hat_adj, y)
@@ -1003,7 +1088,9 @@ class MultiDatasetModel(pl.LightningModule):
         """
         # Find maximum feature counts across all datasets
         max_numeric = max(schema["numeric"] for schema in dataset_schemas.values())
-        max_categorical = max(schema.get("categorical", 0) for schema in dataset_schemas.values())
+        max_categorical = max(
+            schema.get("categorical", 0) for schema in dataset_schemas.values()
+        )
 
         print("Multi-dataset model configuration:")
         print(f"  Mode: {mode}")
@@ -1012,7 +1099,9 @@ class MultiDatasetModel(pl.LightningModule):
         print("  Dataset schemas:")
 
         for name, schema in dataset_schemas.items():
-            print(f"    {name}: {schema['numeric']} numeric + {schema.get('categorical', 0)} categorical")
+            print(
+                f"    {name}: {schema['numeric']} numeric + {schema.get('categorical', 0)} categorical"
+            )
 
         model = cls(
             max_numeric_features=max_numeric,
@@ -1124,7 +1213,8 @@ class MultiDatasetModel(pl.LightningModule):
 
         # Filter out SSL heads and classification head
         encoder_state_dict = {
-            k: v for k, v in state_dict.items()
+            k: v
+            for k, v in state_dict.items()
             if not k.startswith("ssl_heads.") and not k.startswith("head.")
         }
 
@@ -1170,13 +1260,37 @@ if __name__ == "__main__":
         "sensor_data": {
             "numeric": 8,
             "categorical": 2,
-            "columns": ["temp1", "temp2", "humidity", "pressure", "wind", "rain", "light", "sound", "zone", "status"],
+            "columns": [
+                "temp1",
+                "temp2",
+                "humidity",
+                "pressure",
+                "wind",
+                "rain",
+                "light",
+                "sound",
+                "zone",
+                "status",
+            ],
         },
         "user_metrics": {
             "numeric": 12,
             "categorical": 1,
-            "columns": ["clicks", "views", "time", "bounce", "conversion", "revenue",
-                       "sessions", "pages", "downloads", "shares", "likes", "comments", "segment"],
+            "columns": [
+                "clicks",
+                "views",
+                "time",
+                "bounce",
+                "conversion",
+                "revenue",
+                "sessions",
+                "pages",
+                "downloads",
+                "shares",
+                "likes",
+                "comments",
+                "segment",
+            ],
         },
     }
 

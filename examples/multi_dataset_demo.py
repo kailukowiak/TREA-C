@@ -26,11 +26,11 @@ from sklearn.metrics import accuracy_score, f1_score
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from duet.data.downloaders.air_quality import AirQualityDataset
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.data.downloaders.human_activity import HumanActivityDataset
 from duet.models.multi_dataset_model import MultiDatasetModel
 from duet.utils import get_checkpoint_path, get_output_path
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 def create_synthetic_dataset(

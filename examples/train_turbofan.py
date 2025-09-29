@@ -10,9 +10,9 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.nasa_turbofan import NASATurbofanDataset
 from duet.models.duet_model import DualPatchTransformer
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 class PatchTSTClassifier(pl.LightningModule):

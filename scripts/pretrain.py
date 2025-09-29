@@ -18,8 +18,8 @@ from duet.data.downloaders.air_quality import AirQualityDataset
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.data.downloaders.financial_market import FinancialMarketDataset
 from duet.data.downloaders.human_activity import HumanActivityDataset
-from duet.utils.multi_dataset_loader import MultiDatasetDataModule
 from duet.models.multi_dataset_model import MultiDatasetModel
+from duet.utils.multi_dataset_loader import MultiDatasetDataModule
 
 
 def create_datasets(target_sequence_length: int = 96) -> dict[str, dict[str, any]]:

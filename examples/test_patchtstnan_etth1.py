@@ -5,9 +5,9 @@ import torch
 
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.models import PatchTSTNan
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
 def test_patchtstnan():
