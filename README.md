@@ -4,22 +4,33 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange.svg)](https://pytorch.org/)
 [![Lightning](https://img.shields.io/badge/Lightning-2.0+-purple.svg)](https://lightning.ai/)
 
-TREA-C (Triple-Encoded Attention for Column-aware analysis) is a PyTorch Lightning-based library for time series analysis that handles both **numeric and categorical features** with robust **missing value support**. The library implements a novel triple-encoded architecture that combines value channels, mask channels, and column embeddings directly into the model structure, eliminating NaN-related computational issues while preserving missingness information and semantic feature understanding.
+TREA-C (Triple-Encoded Attention for Column-aware analysis) is a PyTorch Lightning-based
+library for time series analysis that handles both **numeric and categorical features**
+with robust **missing value support**. The library implements a novel triple-encoded
+architecture that combines value channels, mask channels, and column embeddings directly
+into the model structure, eliminating NaN-related computational issues while preserving
+missingness information and semantic feature understanding.
 
 ## 🚀 Key Features
 
 ### Core Architecture
 
-- **Triple-Encoded Architecture**: Encodes values, missing value masks, and column semantics as separate channels, avoiding NaN computations
-- **Multi-Modal Input Support**: Handles both numeric sensor data and time-varying categorical features
+- **Triple-Encoded Architecture**: Encodes values, missing value masks, and column
+  semantics as separate channels, avoiding NaN computations
+- **Multi-Modal Input Support**: Handles both numeric sensor data and time-varying
+  categorical features
 - **Patch-Based Processing**: Efficient temporal modeling using patch-based transformers
-- **Column Embeddings**: Semantic understanding of feature names using BERT or learned embeddings
+- **Column Embeddings**: Semantic understanding of feature names using BERT or learned
+  embeddings
 
 ### Multi-Dataset Training
 
-- **Variable Feature Schemas**: Train on datasets with different numbers and types of features
-- **Column Semantic Embeddings**: Transfer knowledge between datasets using feature name semantics
-- **Auto-Expanding Vocabularies**: Dynamic feature vocabularies for multi-dataset scenarios
+- **Variable Feature Schemas**: Train on datasets with different numbers and types of
+  features
+- **Column Semantic Embeddings**: Transfer knowledge between datasets using feature name
+  semantics
+- **Auto-Expanding Vocabularies**: Dynamic feature vocabularies for multi-dataset
+  scenarios
 - **Unified Feature Space**: Automatic padding and masking for heterogeneous datasets
 
 ### Self-Supervised Learning
@@ -258,18 +269,21 @@ model.set_dataset_schema(
 ## 📊 Examples and Use Cases
 
 ### Time Series Classification
+
 - Sensor fault detection
 - Human activity recognition
 - Equipment state classification
 - Medical time series analysis
 
 ### Multi-Dataset Scenarios
+
 - Training on multiple sensor networks
 - Transfer learning between similar datasets
 - Domain adaptation for time series
 - Federated learning applications
 
 ### Self-Supervised Learning
+
 - Pretraining on large unlabeled sensor data
 - Learning temporal representations
 - Few-shot learning with pretrained models
@@ -287,12 +301,15 @@ The `examples/` directory contains comprehensive usage examples:
 ## 🔬 Model Architecture Details
 
 ### Triple-Encoded NaN Handling
+
 Instead of preprocessing NaNs, TREA-C triples the input channels:
+
 - **Value channels**: Original values with NaNs → 0
 - **Mask channels**: 1 where NaN, 0 where valid
 - **Column channels**: Semantic embeddings for each feature
 
 This approach:
+
 - ✅ Eliminates NaN computations (CUDA-friendly)
 - ✅ Preserves missingness information
 - ✅ Adds semantic feature understanding
@@ -300,14 +317,18 @@ This approach:
 - ✅ Minimal computational overhead
 
 ### Column Embeddings
+
 Feature names are embedded to provide semantic context:
+
 - **Simple**: Learned embeddings (lightweight)
 - **BERT**: Semantic embeddings using pre-trained language models
 - **Frozen BERT**: Cached embeddings for multi-dataset efficiency
 - **Auto-expanding**: Dynamic vocabularies for new features
 
 ### Multi-Dataset Training
+
 Unified feature space with automatic padding:
+
 ```
 Dataset A: [temp, humidity, pressure] → [temp, humidity, pressure, 0, 0, ...]
 Dataset B: [wind, rain, temp, light]  → [wind, rain, temp, light, 0, ...]
@@ -316,6 +337,7 @@ Dataset B: [wind, rain, temp, light]  → [wind, rain, temp, light, 0, ...]
 ## 📈 Performance
 
 TREA-C achieves competitive performance on standard benchmarks:
+
 - **ETTh1**: 85%+ accuracy on electricity forecasting classification
 - **Multi-dataset**: Minimal performance degradation with column embeddings
 - **Missing data**: Robust to 5-20% missing value rates
@@ -363,20 +385,24 @@ If you use TREA-C in your research, please cite:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.md) for
+details.
 
 ## 📄 License
 
-This project is licensed under the Apache 2.0 License - see the [LICENSE.txt](LICENSE.txt) file for details.
+This project is licensed under the Apache 2.0 License - see the
+[LICENSE.txt](LICENSE.txt) file for details.
 
 ## 🔗 Related Work
 
-- [PatchTST](https://github.com/yuqinie98/PatchTST): Original patch-based time series transformer
+- [PatchTST](https://github.com/yuqinie98/PatchTST): Original patch-based time series
+  transformer
 - [TimeGPT](https://github.com/Nixtla/neuralforecast): Foundation models for time series
 - [PyTorch Lightning](https://lightning.ai/): Deep learning framework used as foundation
 
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/kailukowiak/TREA-C/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/kailukowiak/TREA-C/discussions)
+- **Discussions**:
+  [GitHub Discussions](https://github.com/kailukowiak/TREA-C/discussions)
 - **Documentation**: [Full Documentation](https://trea-c.readthedocs.io) (coming soon)
