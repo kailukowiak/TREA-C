@@ -4,8 +4,8 @@ import pytorch_lightning as pl
 
 from torch.utils.data import DataLoader, random_split
 
-from duet.data.config import DatasetConfig
-from duet.data.dataset import SyntheticTimeSeriesDataset, TimeSeriesDataset
+from utils.data_config import DatasetConfig
+from utils.dataset_base import SyntheticTimeSeriesDataset, TimeSeriesDataset
 
 
 class TimeSeriesDataModule(pl.LightningDataModule):

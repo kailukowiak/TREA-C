@@ -14,11 +14,11 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.data.air_quality import AirQualityDataset
-from duet.data.etth1 import ETTh1Dataset
-from duet.data.financial_market import FinancialMarketDataset
-from duet.data.human_activity import HumanActivityDataset
-from duet.data.multi_dataset_loader import MultiDatasetDataModule
+from duet.data.downloaders.air_quality import AirQualityDataset
+from duet.data.downloaders.etth1 import ETTh1Dataset
+from duet.data.downloaders.financial_market import FinancialMarketDataset
+from duet.data.downloaders.human_activity import HumanActivityDataset
+from duet.utils.multi_dataset_loader import MultiDatasetDataModule
 from duet.models.pretrain_patch_duet import PretrainPatchDuET
 
 

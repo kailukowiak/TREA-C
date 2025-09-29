@@ -13,7 +13,7 @@ import torch
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 
-from duet.data.etth1 import ETTh1Dataset
+from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.models import PatchTSTNan
 
 

@@ -10,8 +10,8 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
-from duet.data.nasa_turbofan import NASATurbofanDataset
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from duet.data.downloaders.nasa_turbofan import NASATurbofanDataset
 from duet.models.transformer import DualPatchTransformer
 
 
@@ -268,7 +268,7 @@ def main():
         print("Alternative: Using Synthetic Data with Realistic Parameters")
         print("=" * 60)
 
-        from duet.data.dataset import SyntheticTimeSeriesDataset
+        from duet.utils.dataset import SyntheticTimeSeriesDataset
 
         # Create synthetic data mimicking industrial sensors
         train_dataset = SyntheticTimeSeriesDataset(

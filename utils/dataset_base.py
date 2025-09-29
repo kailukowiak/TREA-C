@@ -3,7 +3,7 @@ import torch
 
 from torch.utils.data import Dataset
 
-from duet.data.config import DatasetConfig
+from utils.data_config import DatasetConfig
 
 
 class SyntheticTimeSeriesDataset(Dataset):

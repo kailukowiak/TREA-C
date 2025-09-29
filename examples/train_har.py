@@ -10,7 +10,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from duet.models.transformer import DualPatchTransformer
 from examples.download_har_dataset import HARDataset
 

@@ -18,8 +18,8 @@ from duet.models import PatchTSTNan
 
 sys.path.append(".")
 
-from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
-from duet.data.etth1 import ETTh1Dataset
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.models.transformer import DualPatchTransformer
 
 

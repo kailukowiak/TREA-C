@@ -19,8 +19,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.metrics import accuracy_score, f1_score
 
-from duet.data.datamodule_v2 import TimeSeriesDataModuleV2
-from duet.data.etth1 import ETTh1Dataset
+from duet.utils.datamodule_v2 import TimeSeriesDataModuleV2
+from duet.data.downloaders.etth1 import ETTh1Dataset
 from duet.models.patch_duet import PatchDuET
 from duet.utils import get_checkpoint_path, get_output_path
 
