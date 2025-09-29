@@ -11,11 +11,11 @@ wheels/
 .env
 lightning_logs/
 logs/
-# Ignore data folders but not duet/data Python modules
+# Ignore data folders but not TREA-C/data Python modules
 data/
-!duet/data/
-duet/data/*
-!duet/data/*.py
+!TREA-C/data/
+TREA-C/data/*
+!TREA-C/data/*.py
 checkpoints/
 data/datasets/.env
 tb_logs/

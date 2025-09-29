@@ -1,4 +1,4 @@
-"""Compare DuET with PatchTST and other models on ETTh1 dataset."""
+"""Compare TREA-C with PatchTST and other models on ETTh1 dataset."""
 
 import sys
 import time
@@ -19,7 +19,7 @@ from treac.models import PatchTSTNan
 sys.path.append(".")
 
 from data.downloaders.etth1 import ETTh1Dataset
-from treac.models.duet_model import DualPatchTransformer
+from treac.models.TREA-C_model import DualPatchTransformer
 from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
@@ -514,12 +514,12 @@ def main():
 
     results = []
 
-    # 1. Train DuET (our model)
+    # 1. Train TREA-C (our model)
     print("\\n" + "=" * 60)
-    print("Training DuET (Dual-Patch Transformer)...")
+    print("Training TREA-C (Dual-Patch Transformer)...")
     print("=" * 60)
 
-    duet_model = DualPatchTransformer(
+    TREA-C_model = DualPatchTransformer(
         C_num=c_in,
         C_cat=0,  # No categorical features in ETTh1
         cat_cardinalities=[],
@@ -532,8 +532,8 @@ def main():
         lr=1e-3,
     )
 
-    duet_results = train_model(duet_model, dm, "DuET", max_epochs=MAX_EPOCHS)
-    results.append(duet_results)
+    TREA-C_results = train_model(TREA-C_model, dm, "TREA-C", max_epochs=MAX_EPOCHS)
+    results.append(TREA-C_results)
 
     # 2. Train HuggingFace PatchTST
     print("\\n" + "=" * 60)

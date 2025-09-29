@@ -12,7 +12,7 @@ def analyze_full_dataset_structure():
     print("ANALYZING FULL W3 DATASET STRUCTURE")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     print("Step 1: Basic dataset info...")
     try:
@@ -246,7 +246,7 @@ def analyze_dataset_quality(df):
 
 
 def save_improved_dataset(
-    df, output_path="/home/ubuntu/DuET/data/W3/improved_train_5M.parquet"
+    df, output_path="/home/ubuntu/TREA-C/data/W3/improved_train_5M.parquet"
 ):
     """Save the improved dataset."""
     print("\n" + "=" * 60)

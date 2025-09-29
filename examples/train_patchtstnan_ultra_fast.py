@@ -208,7 +208,7 @@ def extract_dataset_metadata():
     print("EXTRACTING DATASET METADATA")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     # Get total row count efficiently
     total_rows = df_lazy.select(pol.len()).collect().item()
@@ -298,8 +298,8 @@ def main():
     print("=" * 60)
 
     # Create data module with curated train/test split
-    train_path = "/home/ubuntu/DuET/data/W3/train.parquet"
-    test_path = "/home/ubuntu/DuET/data/W3/test.parquet"
+    train_path = "/home/ubuntu/TREA-C/data/W3/train.parquet"
+    test_path = "/home/ubuntu/TREA-C/data/W3/test.parquet"
 
     data_module = W3DataModule(
         train_parquet_path=train_path,

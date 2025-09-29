@@ -9,7 +9,7 @@ def deep_state_analysis():
     print("DEEP STATE ANALYSIS - W3 DATASET")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     print("Step 1: Analyzing state column across entire dataset...")
 
@@ -108,7 +108,7 @@ def check_temporal_patterns():
     print("TEMPORAL PATTERN ANALYSIS")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     # Check if there's any temporal structure
     print("Sampling data from different time periods...")
@@ -154,7 +154,7 @@ def explore_other_classification_options():
     print("ALTERNATIVE CLASSIFICATION STRATEGIES")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     print("Option 1: Use 'class' column instead of 'state'...")
 

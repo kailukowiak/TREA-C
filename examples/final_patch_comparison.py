@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Final comparison: PatchDuET Baseline vs Column-Aware versions.
+Final comparison: PatchTREA-C Baseline vs Column-Aware versions.
 Clean implementation with just the two configurations we want to keep.
 """
 
@@ -158,7 +158,7 @@ def main():
     NAN_RATE = 0.05
 
     print("=" * 80)
-    print("Final PatchDuET Comparison: Baseline vs Column-Aware")
+    print("Final PatchTREA-C Comparison: Baseline vs Column-Aware")
     print("=" * 80)
 
     # Load clean dataset
@@ -195,9 +195,9 @@ def main():
 
     results = []
 
-    # 1. PatchDuET Baseline (no column embeddings)
+    # 1. PatchTREA-C Baseline (no column embeddings)
     print("\n" + "=" * 60)
-    print("Training PatchDuET Baseline (patches + dual-patch NaN)...")
+    print("Training PatchTREA-C Baseline (patches + dual-patch NaN)...")
     print("=" * 60)
 
     baseline_model = MultiDatasetModel.create_baseline(
@@ -215,13 +215,13 @@ def main():
     )
 
     baseline_results = train_model(
-        baseline_model, dm, "PatchDuET-Baseline", max_epochs=MAX_EPOCHS
+        baseline_model, dm, "PatchTREA-C-Baseline", max_epochs=MAX_EPOCHS
     )
     results.append(baseline_results)
 
-    # 2. PatchDuET Column-Aware (with simple column embeddings)
+    # 2. PatchTREA-C Column-Aware (with simple column embeddings)
     print("\n" + "=" * 60)
-    print("Training PatchDuET Column-Aware (patches + dual-patch NaN + columns)...")
+    print("Training PatchTREA-C Column-Aware (patches + dual-patch NaN + columns)...")
     print("=" * 60)
 
     column_model = MultiDatasetModel.create_column_aware(
@@ -241,7 +241,7 @@ def main():
     )
 
     column_results = train_model(
-        column_model, dm, "PatchDuET-Columns", max_epochs=MAX_EPOCHS
+        column_model, dm, "PatchTREA-C-Columns", max_epochs=MAX_EPOCHS
     )
     results.append(column_results)
 
@@ -250,12 +250,12 @@ def main():
 
     # Display results
     print("\n" + "=" * 80)
-    print("FINAL PATCHDUET COMPARISON")
+    print("FINAL PATCHTREA-C COMPARISON")
     print("=" * 80)
     print(df.to_string(index=False, float_format="%.6f"))
 
     # Save results to proper output directory
-    output_path = get_output_path("final_patchduet_comparison.csv", "comparisons")
+    output_path = get_output_path("final_patchTREA-C_comparison.csv", "comparisons")
     df.to_csv(output_path, index=False)
     print(f"\nResults saved to: {output_path}")
 
@@ -264,12 +264,14 @@ def main():
     print("SUMMARY")
     print("=" * 60)
 
-    baseline_acc = df[df["Model"] == "PatchDuET-Baseline"]["Accuracy"].iloc[0]
-    column_acc = df[df["Model"] == "PatchDuET-Columns"]["Accuracy"].iloc[0]
+    baseline_acc = df[df["Model"] == "PatchTREA-C-Baseline"]["Accuracy"].iloc[0]
+    column_acc = df[df["Model"] == "PatchTREA-C-Columns"]["Accuracy"].iloc[0]
 
-    print(f"PatchDuET Baseline:          {baseline_acc:.4f} (patches + dual-patch NaN)")
     print(
-        f"PatchDuET Column-Aware:      {column_acc:.4f} "
+        f"PatchTREA-C Baseline:          {baseline_acc:.4f} (patches + dual-patch NaN)"
+    )
+    print(
+        f"PatchTREA-C Column-Aware:      {column_acc:.4f} "
         f"(+ lightweight column embeddings)"
     )
     print(
@@ -277,8 +279,8 @@ def main():
         f"{((column_acc - baseline_acc) / baseline_acc * 100):+.2f}%"
     )
 
-    baseline_params = df[df["Model"] == "PatchDuET-Baseline"]["Parameters"].iloc[0]
-    column_params = df[df["Model"] == "PatchDuET-Columns"]["Parameters"].iloc[0]
+    baseline_params = df[df["Model"] == "PatchTREA-C-Baseline"]["Parameters"].iloc[0]
+    column_params = df[df["Model"] == "PatchTREA-C-Columns"]["Parameters"].iloc[0]
     param_overhead = (column_params - baseline_params) / baseline_params * 100
 
     print(
@@ -288,11 +290,11 @@ def main():
 
     print("\n🎯 CONCLUSION:")
     print(
-        f"   ✅ Baseline PatchDuET: {baseline_acc:.1%} accuracy, "
+        f"   ✅ Baseline PatchTREA-C: {baseline_acc:.1%} accuracy, "
         f"{baseline_params:,} params"
     )
     print(
-        f"   ✅ Column-Aware PatchDuET: {column_acc:.1%} accuracy, "
+        f"   ✅ Column-Aware PatchTREA-C: {column_acc:.1%} accuracy, "
         f"{column_params:,} params"
     )
     if abs(column_acc - baseline_acc) <= 0.05:  # Within 5%

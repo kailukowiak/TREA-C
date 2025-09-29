@@ -9,7 +9,7 @@ def find_diverse_state_regions():
     print("FINDING DIVERSE STATE REGIONS")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     # Strategy: Search systematically for regions with state diversity
     print("Searching for regions with multiple states...")
@@ -56,7 +56,7 @@ def create_multiclass_dataset_v1():
     print("STRATEGY 1: USING 'CLASS' COLUMN")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     print("Sampling data with 'class' as target...")
 
@@ -126,7 +126,7 @@ def create_multiclass_dataset_v2():
     print("STRATEGY 2: SYNTHETIC CLASSES FROM SENSORS")
     print("=" * 60)
 
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     print("Creating synthetic classes from pressure sensor (P-PDG)...")
 
@@ -191,7 +191,7 @@ def save_and_test_dataset(df, strategy_name):
 
     # Save main dataset
     output_path = (
-        f"/home/ubuntu/DuET/data/W3/multiclass_{strategy_name.lower()}.parquet"
+        f"/home/ubuntu/TREA-C/data/W3/multiclass_{strategy_name.lower()}.parquet"
     )
     df.write_parquet(output_path)
 

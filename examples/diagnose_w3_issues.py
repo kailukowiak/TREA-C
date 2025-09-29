@@ -18,7 +18,7 @@ def analyze_data_loading():
     start_time = time.time()
 
     # Load much smaller subset for testing
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
     df = df_lazy.head(100_000).collect()  # Only 100K rows for testing
 
     load_time = time.time() - start_time

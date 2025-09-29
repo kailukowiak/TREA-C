@@ -10,7 +10,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from treac.models.duet_model import DualPatchTransformer
+from treac.models.TREA-C_model import DualPatchTransformer
 from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
 from examples.download_har_dataset import HARDataset
 
@@ -58,7 +58,7 @@ def main():
     checkpoint = ModelCheckpoint(
         monitor="val_loss",
         dirpath="checkpoints/har",
-        filename="duet-har-{epoch:02d}-{val_loss:.2f}",
+        filename="TREA-C-har-{epoch:02d}-{val_loss:.2f}",
         save_top_k=3,
         mode="min",
     )

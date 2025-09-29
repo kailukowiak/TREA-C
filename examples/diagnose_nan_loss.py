@@ -15,11 +15,11 @@ def diagnose_nan_loss():
     metadata = extract_dataset_metadata()
 
     # Create a small test dataset
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
     wells = df_lazy.select("well_name").unique().collect()["well_name"].to_list()
 
     test_dataset = W3SimpleDataset(
-        parquet_path="/home/ubuntu/DuET/data/W3/train.parquet",
+        parquet_path="/home/ubuntu/TREA-C/data/W3/train.parquet",
         well_names=wells[:2],  # Just 2 wells
         numeric_cols=metadata["numeric_cols"],
         state_to_label=metadata["state_to_label"],

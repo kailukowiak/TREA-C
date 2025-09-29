@@ -8,7 +8,7 @@ import polars as pol
 # Test how long it takes to load a single well
 print("Testing single well loading speed...")
 
-parquet_path = "/home/ubuntu/DuET/data/W3/train.parquet"
+parquet_path = "/home/ubuntu/TREA-C/data/W3/train.parquet"
 df_lazy = pol.scan_parquet(parquet_path)
 
 # Get a well name first

@@ -15,7 +15,7 @@ def analyze_w3_data_distribution():
 
     # Load larger sample to find more classes
     print("Loading larger sample to find class diversity...")
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     # Try different sampling strategies
     sample_sizes = [100_000, 500_000, 1_000_000, 2_000_000]
@@ -55,7 +55,7 @@ def create_balanced_w3_dataset():
     print("=" * 60)
 
     # Load full dataset schema first
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
 
     # Strategy: Sample from different parts of the dataset
     print("Sampling from different time periods to find class diversity...")
@@ -110,7 +110,7 @@ def create_synthetic_multiclass_w3():
     print("=" * 60)
 
     # Load a reasonable sample
-    df_lazy = pol.scan_parquet("/home/ubuntu/DuET/data/W3/train.parquet")
+    df_lazy = pol.scan_parquet("/home/ubuntu/TREA-C/data/W3/train.parquet")
     df = df_lazy.head(300_000).collect()
 
     # Clean data
@@ -325,7 +325,7 @@ def main():
         test_fixed_dataset(fixed_dataset)
 
         # Save for future use
-        output_path = "/home/ubuntu/DuET/data/W3/fixed_train_sample.parquet"
+        output_path = "/home/ubuntu/TREA-C/data/W3/fixed_train_sample.parquet"
         fixed_dataset.write_parquet(output_path)
         print(f"\n✅ Saved fixed dataset to: {output_path}")
         print(f"   Rows: {len(fixed_dataset):,}")

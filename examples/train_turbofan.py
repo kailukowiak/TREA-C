@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.nasa_turbofan import NASATurbofanDataset
-from treac.models.duet_model import DualPatchTransformer
+from treac.models.TREA-C_model import DualPatchTransformer
 from treac.utils.datamodule_v2 import TimeSeriesDataModuleV2
 
 
@@ -328,12 +328,12 @@ def main():
     results = []
     max_epochs = 15
 
-    # 1. Train DuET (our model)
+    # 1. Train TREA-C (our model)
     print("\n" + "=" * 60)
-    print("Training DuET (Dual-Patch Transformer)...")
+    print("Training TREA-C (Dual-Patch Transformer)...")
     print("=" * 60)
 
-    duet_model = DualPatchTransformer(
+    TREA-C_model = DualPatchTransformer(
         C_num=c_in,
         C_cat=feature_info["n_categorical"],
         cat_cardinalities=feature_info["cat_cardinalities"],
@@ -346,8 +346,8 @@ def main():
         lr=1e-3,
     )
 
-    duet_results = train_model(duet_model, dm, "DuET", max_epochs=max_epochs)
-    results.append(duet_results)
+    TREA-C_results = train_model(TREA-C_model, dm, "TREA-C", max_epochs=max_epochs)
+    results.append(TREA-C_results)
 
     # 2. Train PatchTST
     print("\n" + "=" * 60)
