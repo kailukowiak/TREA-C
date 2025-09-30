@@ -80,11 +80,14 @@ class DualPatchTransformer(pl.LightningModule):
             raise ValueError(
                 "column_names must be provided when use_column_embeddings=True"
             )
-        if use_column_embeddings and len(column_names) != C_num:
-            raise ValueError(
-                "Length of column_names ({len(column_names)}) "
-                "must match C_num ({C_num})"
-            )
+        if use_column_embeddings:
+            # Type narrowing: we validated column_names is not None above
+            assert column_names is not None
+            if len(column_names) != C_num:
+                raise ValueError(
+                    "Length of column_names ({len(column_names)}) "
+                    "must match C_num ({C_num})"
+                )
         if task == "classification" and num_classes is None:
             raise ValueError("num_classes must be provided for classification tasks")
 
