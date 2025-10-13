@@ -5,30 +5,32 @@ Usage:
     uv run python train_w3.py
 """
 
+
+import numpy as np
+import pandas as pd
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, Callback
+
+from pytorch_lightning.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from typing import Optional, Tuple
-from torchmetrics import Accuracy, F1Score, ConfusionMatrix
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torchmetrics import Accuracy, ConfusionMatrix, F1Score
 
 from treac.models import TriplePatchTransformer
 
 
 class W3Dataset(Dataset):
-    """Dataset for W3 well data."""
+    """Dataset for W3 well data with well-level splitting support."""
 
     def __init__(
         self,
         parquet_path: str,
         seq_len: int = 96,
         filter_simulated: bool = True,
-        max_samples: Optional[int] = None,
+        max_samples: int | None = None,
+        train_wells: set | None = None,
+        normalization_stats: dict | None = None,
     ):
         """
         Args:
@@ -36,6 +38,8 @@ class W3Dataset(Dataset):
             seq_len: Sequence length for time series windows
             filter_simulated: If True, exclude SIMULATED wells
             max_samples: Maximum number of samples to load (for memory management)
+            train_wells: Set of well names to include (for well-level splitting)
+            normalization_stats: Pre-computed normalization stats (mean, std) from training set
         """
         self.seq_len = seq_len
 
@@ -50,10 +54,19 @@ class W3Dataset(Dataset):
         else:
             df = pd.read_parquet(parquet_path)
 
+        # Filter by wells if specified (for well-level train/val split)
+        if train_wells is not None:
+            print(f"Filtering to {len(train_wells)} specified wells...")
+            df = df[df["well_name"].isin(train_wells)].reset_index(drop=True)
+            print(f"After well filtering: {len(df):,} rows")
+
         # Limit samples if specified
         if max_samples is not None and len(df) > max_samples:
             print(f"Limiting to {max_samples:,} samples")
             df = df.sample(n=max_samples, random_state=42).reset_index(drop=True)
+
+        # Store well names for later use
+        self.well_names = df["well_name"].values
 
         # Feature columns (27 numeric features)
         self.feature_cols = [
@@ -106,8 +119,8 @@ class W3Dataset(Dataset):
 
         # Better class distribution printing for sparse labels
         unique_classes, counts = np.unique(self.labels, return_counts=True)
-        print(f"\nOriginal class distribution:")
-        for cls, count in zip(unique_classes, counts):
+        print("\nOriginal class distribution:")
+        for cls, count in zip(unique_classes, counts, strict=False):
             print(f"  Class {cls}: {count:,} samples")
 
         # Create label mapping: classes 0-9 stay the same, 101-109 map to 10-18
@@ -123,10 +136,10 @@ class W3Dataset(Dataset):
             [self.label_mapping[label] for label in self.labels], dtype=np.int64
         )
 
-        print(f"\nRemapped class distribution:")
+        print("\nRemapped class distribution:")
         unique_remapped, counts_remapped = np.unique(self.labels, return_counts=True)
         for cls, orig_cls, count in zip(
-            unique_remapped, sorted(unique_classes), counts_remapped
+            unique_remapped, sorted(unique_classes), counts_remapped, strict=False
         ):
             print(f"  Class {cls} (originally {orig_cls}): {count:,} samples")
 
@@ -137,40 +150,66 @@ class W3Dataset(Dataset):
         # Use inverse frequency: weight = 1 / (class_count / total_count)
         total_samples = len(self.labels)
         self.class_weights = np.zeros(self.num_classes, dtype=np.float32)
-        for remapped_cls, count in zip(unique_remapped, counts_remapped):
+        for remapped_cls, count in zip(unique_remapped, counts_remapped, strict=False):
             self.class_weights[remapped_cls] = total_samples / (
                 count * self.num_classes
             )
 
-        print(f"\nClass weights (for loss function):")
+        print("\nClass weights (for loss function):")
         for cls, orig_cls, weight in zip(
-            unique_remapped, sorted(unique_classes), self.class_weights
+            unique_remapped, sorted(unique_classes), self.class_weights, strict=False
         ):
             print(f"  Class {cls} (originally {orig_cls}): weight = {weight:.4f}")
 
-        # Compute normalization statistics (on training data only)
-        # Handle columns that are all NaN
-        self.mean = np.nanmean(self.features, axis=0)
-        self.std = np.nanstd(self.features, axis=0)
+        # Compute or use provided normalization statistics
+        if normalization_stats is not None:
+            # Use pre-computed stats from training set
+            print("\nUsing pre-computed normalization statistics from training set")
+            self.mean = normalization_stats["mean"]
+            self.std = normalization_stats["std"]
+        else:
+            # Compute normalization statistics on this dataset (training set only)
+            print("\nComputing normalization statistics...")
 
-        # Replace NaN mean/std with 0 and 1 respectively
-        self.mean = np.nan_to_num(self.mean, nan=0.0)
-        self.std = np.nan_to_num(self.std, nan=1.0)
-        self.std[self.std == 0] = 1.0  # Avoid division by zero
+            # Calculate NaN rates per column
+            nan_rates = np.isnan(self.features).mean(axis=0)
+            print("\nNaN rates per feature:")
+            for i, (col, rate) in enumerate(zip(self.feature_cols, nan_rates, strict=False)):
+                if rate > 0:
+                    print(f"  {col}: {rate * 100:.2f}% NaN")
+
+            # Identify columns that are all or mostly NaN
+            high_nan_cols = [
+                col for col, rate in zip(self.feature_cols, nan_rates, strict=False) if rate > 0.95
+            ]
+            if high_nan_cols:
+                print(f"\nWARNING: {len(high_nan_cols)} columns have >95% NaN values:")
+                for col in high_nan_cols:
+                    print(f"  - {col}")
+
+            # Compute mean and std
+            self.mean = np.nanmean(self.features, axis=0)
+            self.std = np.nanstd(self.features, axis=0)
+
+            # Replace NaN mean/std with 0 and 1 respectively
+            self.mean = np.nan_to_num(self.mean, nan=0.0)
+            self.std = np.nan_to_num(self.std, nan=1.0)
+            self.std[self.std == 0] = 1.0  # Avoid division by zero
 
     def __len__(self):
         # Number of possible windows
         return max(0, len(self.features) - self.seq_len + 1)
 
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         # Extract sequence window
         seq = self.features[idx : idx + self.seq_len]
 
-        # Normalize
+        # Normalize (keep NaNs so TriplePatchTransformer can create mask channels)
         seq_norm = (seq - self.mean) / self.std
 
-        # Replace NaNs with 0 (the model handles NaNs through mask channels)
-        seq_norm = np.nan_to_num(seq_norm, nan=0.0)
+        # IMPORTANT: Do NOT call np.nan_to_num here!
+        # TriplePatchTransformer needs real NaNs to form the mask/value dual patches
+        # The model will handle NaNs internally by creating separate mask channels
 
         # Label for the window (use label at the end of sequence)
         label = self.labels[idx + self.seq_len - 1]
@@ -188,7 +227,7 @@ class W3DataModule(pl.LightningDataModule):
         seq_len: int = 96,
         batch_size: int = 256,
         num_workers: int = 4,
-        max_train_samples: Optional[int] = None,
+        max_train_samples: int | None = None,
         val_split: float = 0.1,
     ):
         super().__init__()
@@ -200,28 +239,71 @@ class W3DataModule(pl.LightningDataModule):
         self.max_train_samples = max_train_samples
         self.val_split = val_split
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         if stage == "fit" or stage is None:
-            # Load full training data (filtered for real wells)
-            full_train = W3Dataset(
+            # Load data to get well names for splitting
+            print("Loading data for well-level train/val split...")
+            df = pd.read_parquet(self.train_path)
+            df = df[df["well_name"] != "SIMULATED"]
+
+            # Limit samples if specified (sample wells, not individual rows)
+            if self.max_train_samples is not None and len(df) > self.max_train_samples:
+                # Sample wells proportionally to keep class distribution
+                unique_wells = df["well_name"].unique()
+                n_wells_to_keep = max(
+                    10, int(len(unique_wells) * (self.max_train_samples / len(df)))
+                )
+                selected_wells = np.random.choice(
+                    unique_wells, size=n_wells_to_keep, replace=False
+                )
+                df = df[df["well_name"].isin(selected_wells)]
+                print(
+                    f"Sampled {len(selected_wells)} wells, resulting in {len(df):,} samples"
+                )
+
+            # Get unique wells and split at well level
+            unique_wells = df["well_name"].unique()
+            print(f"\nTotal unique wells: {len(unique_wells)}")
+
+            # Shuffle and split wells
+            np.random.seed(42)
+            np.random.shuffle(unique_wells)
+            n_val_wells = max(2, int(len(unique_wells) * self.val_split))
+            val_wells = set(unique_wells[:n_val_wells])
+            train_wells = set(unique_wells[n_val_wells:])
+
+            print(f"Train wells: {len(train_wells)}")
+            print(f"Val wells: {len(val_wells)}")
+
+            # Create training dataset first (to compute normalization stats)
+            self.train_dataset = W3Dataset(
                 self.train_path,
                 seq_len=self.seq_len,
                 filter_simulated=True,
-                max_samples=self.max_train_samples,
+                max_samples=None,  # Already limited by well selection
+                train_wells=train_wells,
+                normalization_stats=None,  # Will compute
             )
 
-            # Split into train and validation
-            train_size = int(len(full_train) * (1 - self.val_split))
-            val_size = len(full_train) - train_size
+            # Get normalization stats from training set
+            normalization_stats = {
+                "mean": self.train_dataset.mean,
+                "std": self.train_dataset.std,
+            }
 
-            self.train_dataset, self.val_dataset = torch.utils.data.random_split(
-                full_train,
-                [train_size, val_size],
-                generator=torch.Generator().manual_seed(42),
+            # Create validation dataset using training stats
+            self.val_dataset = W3Dataset(
+                self.train_path,
+                seq_len=self.seq_len,
+                filter_simulated=True,
+                max_samples=None,
+                train_wells=val_wells,
+                normalization_stats=normalization_stats,
             )
 
-            print(f"Train size: {len(self.train_dataset):,}")
-            print(f"Val size: {len(self.val_dataset):,}")
+            print("\nFinal dataset sizes:")
+            print(f"Train windows: {len(self.train_dataset):,}")
+            print(f"Val windows: {len(self.val_dataset):,}")
 
         if stage == "test" or stage is None:
             self.test_dataset = W3Dataset(
@@ -232,10 +314,46 @@ class W3DataModule(pl.LightningDataModule):
             print(f"Test size: {len(self.test_dataset):,}")
 
     def train_dataloader(self):
+        # Create weighted sampler for better class balance
+        # Each sample gets weight based on its class (inverse frequency)
+        print("\nCreating weighted sampler for balanced training...")
+
+        # Get labels for all windows in the dataset
+        # Access the underlying dataset if it's wrapped
+        if hasattr(self.train_dataset, "dataset"):
+            base_dataset = self.train_dataset.dataset
+        else:
+            base_dataset = self.train_dataset
+
+        # Get class for each window (label at end of each sequence)
+        sample_weights = []
+        for idx in range(len(self.train_dataset)):
+            # Get the window's label
+            window_start = idx
+            label_idx = window_start + self.seq_len - 1
+            if label_idx < len(base_dataset.labels):
+                label = base_dataset.labels[label_idx]
+                weight = base_dataset.class_weights[label]
+                sample_weights.append(weight)
+            else:
+                # Shouldn't happen, but handle gracefully
+                sample_weights.append(1.0)
+
+        sample_weights = torch.DoubleTensor(sample_weights)
+
+        # Create sampler
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True,  # Allow sampling with replacement for rare classes
+        )
+
+        print(f"Weighted sampler created with {len(sample_weights):,} samples")
+
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
-            shuffle=True,
+            sampler=sampler,  # Use sampler instead of shuffle
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
             pin_memory=True,
@@ -285,14 +403,17 @@ class ConfusionMatrixCallback(Callback):
     def __init__(self, num_classes: int):
         super().__init__()
         self.num_classes = num_classes
-        self.confusion_matrix = ConfusionMatrix(task="multiclass", num_classes=num_classes)
+        self.confusion_matrix = ConfusionMatrix(
+            task="multiclass", num_classes=num_classes
+        )
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Update confusion matrix with validation batch predictions."""
         x, y = batch
         logits = pl_module(x)
         preds = torch.argmax(logits, dim=1)
-        self.confusion_matrix.update(preds, y)
+        # Move to CPU to avoid device mismatch
+        self.confusion_matrix.update(preds.cpu(), y.cpu())
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """Log confusion matrix as an image to TensorBoard."""
@@ -331,7 +452,7 @@ class W3Model(pl.LightningModule):
         dropout: float = 0.1,
         pooling: str = "mean",
         lr: float = 1e-4,
-        class_weights: Optional[torch.Tensor] = None,
+        class_weights: torch.Tensor | None = None,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["class_weights"])
@@ -354,22 +475,38 @@ class W3Model(pl.LightningModule):
 
         # Loss function with class weights for imbalanced data
         if class_weights is not None:
-            print(f"\nUsing weighted loss with class weights")
+            print("\nUsing weighted loss with class weights")
             self.criterion = nn.CrossEntropyLoss(weight=class_weights)
         else:
-            print(f"\nUsing unweighted loss")
+            print("\nUsing unweighted loss")
             self.criterion = nn.CrossEntropyLoss()
 
         # Metrics for evaluation
-        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, average="macro")
-        self.val_f1 = F1Score(task="multiclass", num_classes=num_classes, average="macro")
-        self.val_per_class_acc = Accuracy(task="multiclass", num_classes=num_classes, average="none")
-        self.val_per_class_f1 = F1Score(task="multiclass", num_classes=num_classes, average="none")
+        self.val_acc = Accuracy(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.val_f1 = F1Score(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.val_per_class_acc = Accuracy(
+            task="multiclass", num_classes=num_classes, average="none"
+        )
+        self.val_per_class_f1 = F1Score(
+            task="multiclass", num_classes=num_classes, average="none"
+        )
 
-        self.test_acc = Accuracy(task="multiclass", num_classes=num_classes, average="macro")
-        self.test_f1 = F1Score(task="multiclass", num_classes=num_classes, average="macro")
-        self.test_per_class_acc = Accuracy(task="multiclass", num_classes=num_classes, average="none")
-        self.test_per_class_f1 = F1Score(task="multiclass", num_classes=num_classes, average="none")
+        self.test_acc = Accuracy(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.test_f1 = F1Score(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.test_per_class_acc = Accuracy(
+            task="multiclass", num_classes=num_classes, average="none"
+        )
+        self.test_per_class_f1 = F1Score(
+            task="multiclass", num_classes=num_classes, average="none"
+        )
 
     def forward(self, x):
         # TriplePatchTransformer expects (x_num, x_cat)
@@ -501,7 +638,7 @@ def main():
     print("=" * 80)
     print("W3 Well Classification Training")
     print("=" * 80)
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     for key, val in CONFIG.items():
         print(f"  {key}: {val}")
     print()

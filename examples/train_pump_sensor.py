@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 
+from data.downloaders.pump_sensor import PumpSensorDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from data.downloaders.pump_sensor import PumpSensorDataset
 from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
 

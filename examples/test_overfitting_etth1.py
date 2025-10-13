@@ -10,10 +10,10 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 
+from data.downloaders.etth1 import ETTh1Dataset
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 
-from data.downloaders.etth1 import ETTh1Dataset
 from treac.models import PatchTSTNan
 
 

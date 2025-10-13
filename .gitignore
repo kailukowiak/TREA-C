@@ -20,3 +20,4 @@ checkpoints/
 data/datasets/.env
 tb_logs/
 datasets/
+etth1_model_comparison.csv

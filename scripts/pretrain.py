@@ -12,14 +12,14 @@ from typing import Any
 
 import pytorch_lightning as pl
 
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
-
 from data.downloaders.air_quality import AirQualityDataset
 from data.downloaders.etth1 import ETTh1Dataset
 from data.downloaders.financial_market import FinancialMarketDataset
 from data.downloaders.human_activity import HumanActivityDataset
 from data.downloaders.multi_dataset_loader import MultiDatasetDataModule
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
+
 from treac.models.multi_dataset_model import MultiDatasetModel
 
 
