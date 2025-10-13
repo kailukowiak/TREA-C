@@ -89,7 +89,7 @@ fixable = ["ALL"]
 
 [tool.ruff.lint.isort]
 # Separate imports into sections
-known-first-party = ["tabnct"]
+known-first-party = ["treac"]
 # Force imports to be on separate lines for better readability
 force-single-line = false
 # Combine star imports

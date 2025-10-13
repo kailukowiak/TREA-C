@@ -19,7 +19,7 @@ from treac.models import PatchTSTNan
 sys.path.append(".")
 
 from data.downloaders.etth1 import ETTh1Dataset
-from treac.models.triple_attention import DualPatchTransformer
+from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
 
 
@@ -516,10 +516,10 @@ def main():
 
     # 1. Train TREA-C (our model)
     print("\\n" + "=" * 60)
-    print("Training TREA-C (Dual-Patch Transformer)...")
+    print("Training TREA-C (Triple-Patch Transformer)...")
     print("=" * 60)
 
-    treac_model = DualPatchTransformer(
+    treac_model = TriplePatchTransformer(
         C_num=c_in,
         C_cat=0,  # No categorical features in ETTh1
         cat_cardinalities=[],
@@ -593,7 +593,7 @@ def main():
     cnn_results = train_model(cnn_model, dm, "CNN", max_epochs=MAX_EPOCHS)
     results.append(cnn_results)
 
-    # 5. Train PatchTSTNan (Custom PatchTST with dual-patch NaN handling)
+    # 5. Train PatchTSTNan (Custom PatchTST with NaN handling)
     print("\\n" + "=" * 60)
     print("Training PatchTSTNan...")
     print("=" * 60)

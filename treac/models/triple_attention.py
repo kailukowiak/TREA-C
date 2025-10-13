@@ -1,4 +1,4 @@
-"""Dual-Patch Transformer model implementation."""
+"""Triple-Patch Transformer model implementation."""
 
 from typing import Any
 
@@ -9,10 +9,11 @@ import torch.nn as nn
 from .embeddings import ColumnEmbedding
 
 
-class DualPatchTransformer(pl.LightningModule):
-    """Dual-Patch Transformer for time series with numeric and categorical features.
+class TriplePatchTransformer(pl.LightningModule):
+    """Triple-Patch Transformer for time series with numeric and categorical features.
 
-    Handles missing values efficiently by encoding them in a dual-patch format.
+    Handles missing values efficiently by encoding them in a triple-patch format:
+    value channels, mask channels, and optional column embeddings.
     """
 
     def __init__(
@@ -33,7 +34,7 @@ class DualPatchTransformer(pl.LightningModule):
         use_column_embeddings: bool = False,
         column_embedding_config: dict[str, Any] | None = None,
     ):
-        """Initialize the Dual-Patch Transformer.
+        """Initialize the Triple-Patch Transformer.
 
         Args:
             C_num: Number of numeric channels
@@ -240,7 +241,7 @@ class DualPatchTransformer(pl.LightningModule):
             **kwargs: Additional model parameters
 
         Returns:
-            DualPatchTransformer instance
+            TriplePatchTransformer instance
         """
         model_params = config.get_model_params()
         model_params.update(kwargs)

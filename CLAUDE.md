@@ -37,10 +37,10 @@ user to run training scripts instead of running them yourself. Avoid commands li
 
 ### Core Models (treac/models/)
 
-**DualPatchTransformer** (`triple_attention.py`)
+**TriplePatchTransformer** (`triple_attention.py`)
 
 - Base transformer for time series with numeric and categorical features
-- Dual-patch encoding: value channels + mask channels for NaN handling
+- Triple-patch encoding: value channels + mask channels + column embeddings for NaN handling
 - Supports classification and regression tasks
 - Key params: `C_num`, `C_cat`, `T` (sequence length), `d_model`, `n_head`, `num_layers`
 
@@ -126,8 +126,8 @@ The model can train on datasets with different schemas:
 ### Creating a basic model
 
 ```python
-from treac.models import DualPatchTransformer
-model = DualPatchTransformer(
+from treac.models import TriplePatchTransformer
+model = TriplePatchTransformer(
     C_num=7, C_cat=0, cat_cardinalities=[],
     T=96, d_model=128, task='classification',
     num_classes=3, n_head=8, num_layers=3

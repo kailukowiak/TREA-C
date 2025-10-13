@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.nasa_turbofan import NASATurbofanDataset
-from treac.models.triple_attention import DualPatchTransformer
+from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
 
 
@@ -330,10 +330,10 @@ def main():
 
     # 1. Train TREA-C (our model)
     print("\n" + "=" * 60)
-    print("Training TREA-C (Dual-Patch Transformer)...")
+    print("Training TREA-C (Triple-Patch Transformer)...")
     print("=" * 60)
 
-    treac_model = DualPatchTransformer(
+    treac_model = TriplePatchTransformer(
         C_num=c_in,
         C_cat=feature_info["n_categorical"],
         cat_cardinalities=feature_info["cat_cardinalities"],

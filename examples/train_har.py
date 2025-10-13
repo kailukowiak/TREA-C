@@ -1,4 +1,4 @@
-"""Train DualPatchTransformer on Human Activity Recognition dataset."""
+"""Train TriplePatchTransformer on Human Activity Recognition dataset."""
 
 import sys
 
@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from examples.download_har_dataset import HARDataset
-from treac.models.triple_attention import DualPatchTransformer
+from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
 
 
@@ -38,7 +38,7 @@ def main():
     )
 
     # Create model
-    model = DualPatchTransformer(
+    model = TriplePatchTransformer(
         C_num=9,  # 9 sensor channels (3-axis acc + 3-axis gyro + 3-axis total acc)
         C_cat=2,  # Dummy categorical features
         cat_cardinalities=[1, 1],  # Dummy

@@ -98,7 +98,7 @@ TREA-C/
 
 ```python
 import torch
-from treac.models import DualPatchTransformer
+from treac.models import TriplePatchTransformer
 from utils import SyntheticTimeSeriesDataset, TimeSeriesDataModule
 import pytorch_lightning as pl
 
@@ -120,7 +120,7 @@ dm = TimeSeriesDataModule(
 )
 
 # Create model
-model = DualPatchTransformer(
+model = TriplePatchTransformer(
     c_in=7,                    # numeric input channels
     seq_len=96,                # sequence length
     num_classes=3,             # output classes

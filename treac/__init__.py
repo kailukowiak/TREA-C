@@ -2,12 +2,12 @@
 
 __version__ = "0.1.0"
 
-from treac.models import DualPatchTransformer, MultiDatasetModel, PatchTSTNan
+from treac.models import MultiDatasetModel, PatchTSTNan, TriplePatchTransformer
 from utils import SyntheticTimeSeriesDataset, TimeSeriesDataModule
 
 
 __all__ = [
-    "DualPatchTransformer",
+    "TriplePatchTransformer",
     "MultiDatasetModel",
     "PatchTSTNan",
     "SyntheticTimeSeriesDataset",

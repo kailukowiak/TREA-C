@@ -1,4 +1,4 @@
-"""Train DualPatchTransformer on Industrial Pump Sensor dataset."""
+"""Train TriplePatchTransformer on Industrial Pump Sensor dataset."""
 
 import sys
 
@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from data.downloaders.pump_sensor import PumpSensorDataset
-from treac.models.triple_attention import DualPatchTransformer
+from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
 
 
@@ -117,7 +117,7 @@ def main():
     )
 
     # Create model
-    model = DualPatchTransformer(
+    model = TriplePatchTransformer(
         C_num=feature_info["n_numeric"],
         C_cat=feature_info["n_categorical"],
         cat_cardinalities=feature_info["cat_cardinalities"],
