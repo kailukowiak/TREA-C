@@ -1,6 +1,9 @@
 """Train and compare models on NASA Turbofan dataset."""
 
+import sys
 import time
+
+from pathlib import Path
 
 import pandas as pd
 import pytorch_lightning as pl
@@ -10,9 +13,20 @@ import torch.nn as nn
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from data.downloaders.nasa_turbofan import NASATurbofanDataset
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
+
+
+# Try to import turbofan dataset, but don't fail if it doesn't exist
+try:
+    from data.downloaders.nasa_turbofan import NASATurbofanDataset
+
+    HAS_TURBOFAN_LOADER = True
+except (ImportError, ModuleNotFoundError):
+    HAS_TURBOFAN_LOADER = False
 
 
 class PatchTSTClassifier(pl.LightningModule):
@@ -224,34 +238,40 @@ def train_model(model, dm, model_name, max_epochs=30):
 
 
 def main():
-    # Try to load NASA dataset
-    try:
-        # First check if data exists
-        train_dataset = NASATurbofanDataset(
-            data_dir="./data/nasa_turbofan",
-            subset="FD001",
-            train=True,
-            sequence_length=50,
-            task="classification",
-            num_classes=3,
-            download=True,  # Auto-download via kagglehub
-        )
+    # Try to load NASA dataset if loader is available
+    use_turbofan = False
+    if HAS_TURBOFAN_LOADER:
+        try:
+            # First check if data exists
+            train_dataset = NASATurbofanDataset(
+                data_dir="./data/nasa_turbofan",
+                subset="FD001",
+                train=True,
+                sequence_length=50,
+                task="classification",
+                num_classes=3,
+                download=True,  # Auto-download via kagglehub
+            )
 
-        val_dataset = NASATurbofanDataset(
-            data_dir="./data/nasa_turbofan",
-            subset="FD001",
-            train=False,
-            sequence_length=50,
-            task="classification",
-            num_classes=3,
-            download=False,
-        )
+            val_dataset = NASATurbofanDataset(
+                data_dir="./data/nasa_turbofan",
+                subset="FD001",
+                train=False,
+                sequence_length=50,
+                task="classification",
+                num_classes=3,
+                download=False,
+            )
 
-        print("Loaded NASA Turbofan dataset:")
-        print(f"Train samples: {len(train_dataset)}")
-        print(f"Val samples: {len(val_dataset)}")
+            print("Loaded NASA Turbofan dataset:")
+            print(f"Train samples: {len(train_dataset)}")
+            print(f"Val samples: {len(val_dataset)}")
+            use_turbofan = True
 
-    except Exception:
+        except Exception as e:
+            print(f"Failed to load turbofan: {e}")
+
+    if not use_turbofan:
         print("\n" + "=" * 60)
         print("NASA Turbofan dataset not found!")
         print("=" * 60)
@@ -268,7 +288,7 @@ def main():
         print("Alternative: Using Synthetic Data with Realistic Parameters")
         print("=" * 60)
 
-        from treac.utils.dataset import SyntheticTimeSeriesDataset
+        from utils.dataset_base import SyntheticTimeSeriesDataset
 
         # Create synthetic data mimicking industrial sensors
         train_dataset = SyntheticTimeSeriesDataset(

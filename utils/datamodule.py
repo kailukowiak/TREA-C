@@ -57,7 +57,10 @@ class TimeSeriesDataModule(pl.LightningDataModule):
             test_df: Test DataFrame
         """
         super().__init__()
-        self.save_hyperparameters()
+        # Only save hyperparameters if using synthetic data
+        # When using pre-made datasets, the params aren't relevant and cause conflicts
+        if train_dataset is None and val_dataset is None:
+            self.save_hyperparameters()
 
         self.batch_size = batch_size
         self.num_workers = num_workers

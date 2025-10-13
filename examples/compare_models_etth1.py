@@ -18,9 +18,113 @@ from treac.models import PatchTSTNan
 
 sys.path.append(".")
 
-from data.downloaders.etth1 import ETTh1Dataset
 from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
+from torch.utils.data import Dataset
+
+
+class ETTh1Dataset(Dataset):
+    """Simple ETTh1 dataset loader from CSV."""
+
+    def __init__(
+        self,
+        data_dir: str,
+        train: bool = True,
+        sequence_length: int = 96,
+        task: str = "classification",
+        num_classes: int = 3,
+        download: bool = False,
+    ):
+        """Load ETTh1 dataset from CSV.
+
+        Args:
+            data_dir: Directory containing ETTh1.csv
+            train: Whether to load train or validation split
+            sequence_length: Length of sequences
+            task: 'classification' or 'regression'
+            num_classes: Number of classes for classification
+            download: Ignored (data already downloaded)
+        """
+        self.data_dir = data_dir
+        self.train = train
+        self.sequence_length = sequence_length
+        self.task = task
+        self.num_classes = num_classes
+
+        # Load CSV
+        import os
+        csv_path = os.path.join(data_dir, "ETTh1.csv")
+        df = pd.read_csv(csv_path)
+
+        # Extract numeric features (exclude date column)
+        feature_cols = [col for col in df.columns if col != "date"]
+        data = df[feature_cols].values  # Shape: [T_total, C]
+
+        # Create sliding windows
+        self.x_num = []
+        self.y = []
+
+        # Use 80/20 train/val split
+        split_idx = int(0.8 * len(data))
+
+        if train:
+            data_split = data[:split_idx]
+        else:
+            data_split = data[split_idx:]
+
+        # Create sequences with sliding window
+        for i in range(len(data_split) - sequence_length):
+            seq = data_split[i:i + sequence_length]  # [T, C]
+            self.x_num.append(torch.FloatTensor(seq).T)  # [C, T]
+
+            # Create classification target based on next value trend
+            if task == "classification":
+                # Use the next value's change to create classes
+                next_val = data_split[i + sequence_length, 0]  # Use first feature
+                current_val = data_split[i + sequence_length - 1, 0]
+                change = (next_val - current_val) / (abs(current_val) + 1e-8)
+
+                # Create balanced classes based on change magnitude
+                if change < -0.01:
+                    label = 0  # Decrease
+                elif change > 0.01:
+                    label = 2  # Increase
+                else:
+                    label = 1  # Stable
+
+                self.y.append(label)
+            else:
+                # Regression: predict next value
+                next_val = data_split[i + sequence_length, 0]
+                self.y.append(next_val)
+
+        self.x_num = torch.stack(self.x_num)
+        self.y = torch.LongTensor(self.y) if task == "classification" else torch.FloatTensor(self.y)
+
+        # Store feature info
+        self.C_num = len(feature_cols)
+        self.C_cat = 0
+        self.cat_cardinalities = []
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        return {
+            "x_num": self.x_num[idx],
+            "x_cat": torch.zeros(0, self.sequence_length, dtype=torch.long),  # No categorical features
+            "y": self.y[idx],
+        }
+
+    def get_feature_info(self):
+        """Return feature information for model initialization."""
+        return {
+            "n_numeric": self.C_num,
+            "n_categorical": 0,
+            "cat_cardinalities": [],
+            "sequence_length": self.sequence_length,
+            "num_classes": self.num_classes if self.task == "classification" else None,
+        }
 
 
 class HFPatchTSTClassifier(pl.LightningModule):
@@ -422,43 +526,6 @@ def train_model(model, dm, model_name, max_epochs=10):
     }
 
 
-def inject_nans(dataset, nan_rate=0.05):
-    """Inject NaN values into the dataset at specified rate."""
-    print(f"Injecting NaN values at rate: {nan_rate:.1%}")
-
-    # Create a copy of the dataset
-    dataset_copy = type(dataset)(
-        data_dir=dataset.data_dir,
-        train=dataset.train,
-        sequence_length=dataset.sequence_length,
-        task=dataset.task,
-        num_classes=dataset.num_classes,
-        download=False,
-    )
-
-    # Inject NaNs into x_num
-    x_num = dataset_copy.x_num.clone()
-
-    # Generate random mask for NaN injection
-    nan_mask = torch.rand_like(x_num) < nan_rate
-    x_num[nan_mask] = float("nan")
-
-    # Update the dataset
-    dataset_copy.x_num = x_num
-
-    # Calculate actual NaN percentage
-    total_values = x_num.numel()
-    nan_count = torch.isnan(x_num).sum().item()
-    actual_nan_rate = nan_count / total_values
-
-    print(
-        f"Actual NaN rate: {actual_nan_rate:.1%} "
-        f"({nan_count:,} / {total_values:,} values)"
-    )
-
-    return dataset_copy
-
-
 def main():
     print("=" * 80)
     print("Model Comparison on ETTh1 Dataset")
@@ -527,6 +594,8 @@ def main():
         d_model=128,  # Increased from 64 to match PatchTST
         n_head=8,  # Increased from 4 to match PatchTST
         num_layers=3,
+        patch_len=16,  # Patch size matching PatchTST
+        stride=8,  # Stride matching PatchTST
         task="classification",
         num_classes=num_classes,
         lr=1e-3,
