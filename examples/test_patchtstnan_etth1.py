@@ -3,9 +3,9 @@
 import pytorch_lightning as pl
 import torch
 
-from data.downloaders.etth1 import ETTh1Dataset
 from pytorch_lightning.loggers import TensorBoardLogger
 
+from data.downloaders.etth1 import ETTh1Dataset
 from treac.models import PatchTSTNan
 from utils.datamodule import TimeSeriesDataModule
 
