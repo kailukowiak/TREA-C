@@ -68,7 +68,8 @@ class W3Dataset(Dataset):
         # Store well names for later use
         self.well_names = df["well_name"].values
 
-        # Feature columns (27 numeric features)
+        # Feature columns (22 numeric features after removing >95% NaN columns)
+        # Removed: P-JUS-BS, P-MON-CKGL, P-MON-SDV-P, PT-P, QBS (all >95% NaN)
         self.feature_cols = [
             "ABER-CKGL",
             "ABER-CKP",
@@ -82,16 +83,11 @@ class W3Dataset(Dataset):
             "ESTADO-W2",
             "ESTADO-XO",
             "P-ANULAR",
-            "P-JUS-BS",
             "P-JUS-CKGL",
             "P-JUS-CKP",
-            "P-MON-CKGL",
             "P-MON-CKP",
-            "P-MON-SDV-P",
             "P-PDG",
-            "PT-P",
             "P-TPT",
-            "QBS",
             "QGL",
             "T-JUS-CKP",
             "T-MON-CKP",
@@ -243,65 +239,39 @@ class W3DataModule(pl.LightningDataModule):
 
     def setup(self, stage: str | None = None):
         if stage == "fit" or stage is None:
-            # Load data to get well names for splitting
-            print("Loading data for well-level train/val split...")
-            df = pd.read_parquet(self.train_path)
-            df = df[df["well_name"] != "SIMULATED"]
+            # Load data for random train/val split (not well-based)
+            print("Loading train.parquet for random train/val split...")
 
-            # Limit samples if specified (sample wells, not individual rows)
-            if self.max_train_samples is not None and len(df) > self.max_train_samples:
-                # Sample wells proportionally to keep class distribution
-                unique_wells = df["well_name"].unique()
-                n_wells_to_keep = max(
-                    10, int(len(unique_wells) * (self.max_train_samples / len(df)))
-                )
-                selected_wells = np.random.choice(
-                    unique_wells, size=n_wells_to_keep, replace=False
-                )
-                df = df[df["well_name"].isin(selected_wells)]
-                print(
-                    f"Sampled {len(selected_wells)} wells, resulting in {len(df):,}"
-                    + " samples",
-                )
-
-            # Get unique wells and split at well level
-            unique_wells = df["well_name"].unique()
-            print(f"\nTotal unique wells: {len(unique_wells)}")
-
-            # Shuffle and split wells
-            np.random.seed(42)
-            np.random.shuffle(unique_wells)
-            n_val_wells = max(2, int(len(unique_wells) * self.val_split))
-            val_wells = set(unique_wells[:n_val_wells])
-            train_wells = set(unique_wells[n_val_wells:])
-
-            print(f"Train wells: {len(train_wells)}")
-            print(f"Val wells: {len(val_wells)}")
-
-            # Create training dataset first (to compute normalization stats)
-            self.train_dataset = W3Dataset(
+            # Create full dataset first to compute normalization stats
+            full_dataset = W3Dataset(
                 self.train_path,
                 seq_len=self.seq_len,
                 filter_simulated=True,
-                max_samples=None,  # Already limited by well selection
-                train_wells=train_wells,
+                max_samples=self.max_train_samples,
+                train_wells=None,  # Load all wells
                 normalization_stats=None,  # Will compute
             )
 
-            # Get normalization stats from training set
+            # Get normalization stats from full dataset
             normalization_stats = {
-                "mean": self.train_dataset.mean,
-                "std": self.train_dataset.std,
+                "mean": full_dataset.mean,
+                "std": full_dataset.std,
             }
 
-            # Create validation dataset using training stats
-            self.val_dataset = W3Dataset(
-                self.train_path,
-                seq_len=self.seq_len,
-                filter_simulated=True,
-                max_samples=None,
-                train_wells=val_wells,
-                normalization_stats=normalization_stats,
+            # Random train/val split (same distribution)
+            total_windows = len(full_dataset)
+            n_val = int(total_windows * self.val_split)
+            n_train = total_windows - n_val
+
+            print(f"\nSplitting {total_windows:,} windows into:")
+            print(f"  Train: {n_train:,} ({(1-self.val_split)*100:.0f}%)")
+            print(f"  Val: {n_val:,} ({self.val_split*100:.0f}%)")
+
+            # Use PyTorch's random_split for reproducible split
+            from torch.utils.data import random_split
+            generator = torch.Generator().manual_seed(42)
+            self.train_dataset, self.val_dataset = random_split(
+                full_dataset, [n_train, n_val], generator=generator
             )
 
             print("\nFinal dataset sizes:")
@@ -309,10 +279,28 @@ class W3DataModule(pl.LightningDataModule):
             print(f"Val windows: {len(self.val_dataset):,}")
 
         if stage == "test" or stage is None:
+            # Use normalization stats from training if available
+            if hasattr(self, "train_dataset"):
+                # Get base dataset if wrapped in random_split
+                if hasattr(self.train_dataset, "dataset"):
+                    base_train_dataset = self.train_dataset.dataset
+                else:
+                    base_train_dataset = self.train_dataset
+
+                normalization_stats = {
+                    "mean": base_train_dataset.mean,
+                    "std": base_train_dataset.std,
+                }
+                print("\nUsing training normalization stats for test set")
+            else:
+                normalization_stats = None
+                print("\nComputing normalization stats for test set")
+
             self.test_dataset = W3Dataset(
                 self.test_path,
                 seq_len=self.seq_len,
                 filter_simulated=False,  # Test set doesn't have SIMULATED
+                normalization_stats=normalization_stats,
             )
             print(f"Test size: {len(self.test_dataset):,}")
 
@@ -446,7 +434,7 @@ class W3Model(pl.LightningModule):
 
     def __init__(
         self,
-        c_in: int = 27,
+        c_in: int = 22,  # Updated from 27 after removing >95% NaN features
         seq_len: int = 96,
         num_classes: int = 17,
         d_model: int = 128,
@@ -625,15 +613,15 @@ def main():
     # Configuration
     CONFIG = {
         "seq_len": 96,
-        "batch_size": 256,
+        "batch_size": 1024,  # Increased from 256 for better GPU utilization
         "num_workers": 8,
         "max_train_samples": 5_000_000,  # Limit to 5M samples (adjust as needed)
         "val_split": 0.1,
         "max_epochs": 50,
-        "d_model": 128,
+        "d_model": 256,  # Increased from 128 for more model capacity
         "n_head": 8,
-        "num_layers": 3,
-        "dropout": 0.1,
+        "num_layers": 6,  # Increased from 3 for deeper model
+        "dropout": 0.2,  # Increased from 0.1 to handle larger model
         "pooling": "mean",
         "lr": 1e-4,
     }
@@ -672,7 +660,7 @@ def main():
 
     # Create model
     model = W3Model(
-        c_in=27,
+        c_in=22,  # Updated from 27 after removing >95% NaN features
         seq_len=CONFIG["seq_len"],
         num_classes=num_classes,
         d_model=CONFIG["d_model"],
@@ -696,7 +684,7 @@ def main():
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
-        patience=10,
+        patience=3,
         mode="min",
         verbose=True,
     )
@@ -722,6 +710,7 @@ def main():
         gradient_clip_val=1.0,
         log_every_n_steps=100,
         precision="16-mixed",  # Use mixed precision for faster training
+        enable_progress_bar=True,  # Keep progress bars visible
     )
 
     # Train
