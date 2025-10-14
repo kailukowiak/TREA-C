@@ -133,7 +133,11 @@ class TriplePatchTransformer(pl.LightningModule):
 
         # Temporal encoder with pre-normalization for better stability
         enc_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=n_head, batch_first=True, dropout=dropout, norm_first=True
+            d_model=d_model,
+            nhead=n_head,
+            batch_first=True,
+            dropout=dropout,
+            norm_first=True,
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
 
@@ -197,7 +201,9 @@ class TriplePatchTransformer(pl.LightningModule):
             x_num_processed = torch.cat([x_val, m_nan], dim=1)  # [B, 2·C_num, T]
 
         # 3. Create patches from the processed input
-        patches = self.create_patches(x_num_processed)  # [B, num_patches, (2 or 3)·C_num·patch_len]
+        patches = self.create_patches(
+            x_num_processed
+        )  # [B, num_patches, (2 or 3)·C_num·patch_len]
 
         # 4. Embed patches
         z = self.patch_embedding(patches)  # [B, num_patches, d_model]
@@ -214,9 +220,13 @@ class TriplePatchTransformer(pl.LightningModule):
             cat_patches = []
             for i in range(0, T - self.patch_len + 1, self.stride):
                 cat_slice = x_cat[:, :, i : i + self.patch_len]  # [B, C_cat, patch_len]
-                # Use mean embedding over the patch (alternatively could use first timestep)
-                cat_vecs = [emb(cat_slice[:, j].long()) for j, emb in enumerate(self.cat_embs)]
-                cat_vec = torch.stack(cat_vecs, dim=0).sum(dim=0)  # [B, patch_len, d_model]
+                # Use mean embedding over the patch
+                cat_vecs = [
+                    emb(cat_slice[:, j].long()) for j, emb in enumerate(self.cat_embs)
+                ]
+                cat_vec = torch.stack(cat_vecs, dim=0).sum(
+                    dim=0
+                )  # [B, patch_len, d_model]
                 cat_vec = cat_vec.mean(dim=1)  # [B, d_model] - average over patch
                 cat_patches.append(cat_vec)
 
@@ -298,12 +308,8 @@ class TriplePatchTransformer(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizer with learning rate scheduler."""
-        optimizer = torch.optim.AdamW(
-            self.parameters(), lr=self.lr, weight_decay=0.01
-        )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=100
-        )
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=0.01)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
         return [optimizer], [scheduler]
 
     @classmethod

@@ -1,12 +1,15 @@
 """Quick test of fixed TREA-C on ETTh1."""
 
 import sys
+
 from pathlib import Path
 
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+
 from torch.utils.data import Dataset
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -31,6 +34,7 @@ class ETTh1Dataset(Dataset):
 
         # Load CSV
         import os
+
         csv_path = os.path.join(data_dir, "ETTh1.csv")
         df = pd.read_csv(csv_path)
 
@@ -47,7 +51,7 @@ class ETTh1Dataset(Dataset):
         self.y = []
 
         for i in range(len(data_split) - sequence_length):
-            seq = data_split[i:i + sequence_length]  # [T, C]
+            seq = data_split[i : i + sequence_length]  # [T, C]
             self.x_num.append(torch.FloatTensor(seq).T)  # [C, T]
 
             # Create classification target based on next value trend
@@ -98,7 +102,7 @@ dm = TimeSeriesDataModule(
 
 # Test a single batch
 sample_batch = next(iter(dm.train_dataloader()))
-print(f"\nBatch shapes:")
+print("\nBatch shapes:")
 print(f"  x_num: {sample_batch['x_num'].shape}")
 print(f"  y: {sample_batch['y'].shape}")
 

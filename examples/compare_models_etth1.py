@@ -18,9 +18,10 @@ from treac.models import PatchTSTNan
 
 sys.path.append(".")
 
+from torch.utils.data import Dataset
+
 from treac.models.triple_attention import TriplePatchTransformer
 from utils.datamodule import TimeSeriesDataModule
-from torch.utils.data import Dataset
 
 
 class ETTh1Dataset(Dataset):
@@ -53,6 +54,7 @@ class ETTh1Dataset(Dataset):
 
         # Load CSV
         import os
+
         csv_path = os.path.join(data_dir, "ETTh1.csv")
         df = pd.read_csv(csv_path)
 
@@ -74,7 +76,7 @@ class ETTh1Dataset(Dataset):
 
         # Create sequences with sliding window
         for i in range(len(data_split) - sequence_length):
-            seq = data_split[i:i + sequence_length]  # [T, C]
+            seq = data_split[i : i + sequence_length]  # [T, C]
             self.x_num.append(torch.FloatTensor(seq).T)  # [C, T]
 
             # Create classification target based on next value trend
@@ -99,7 +101,11 @@ class ETTh1Dataset(Dataset):
                 self.y.append(next_val)
 
         self.x_num = torch.stack(self.x_num)
-        self.y = torch.LongTensor(self.y) if task == "classification" else torch.FloatTensor(self.y)
+        self.y = (
+            torch.LongTensor(self.y)
+            if task == "classification"
+            else torch.FloatTensor(self.y)
+        )
 
         # Store feature info
         self.C_num = len(feature_cols)
@@ -112,7 +118,9 @@ class ETTh1Dataset(Dataset):
     def __getitem__(self, idx):
         return {
             "x_num": self.x_num[idx],
-            "x_cat": torch.zeros(0, self.sequence_length, dtype=torch.long),  # No categorical features
+            "x_cat": torch.zeros(
+                0, self.sequence_length, dtype=torch.long
+            ),  # No categorical features
             "y": self.y[idx],
         }
 
